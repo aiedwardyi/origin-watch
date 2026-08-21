@@ -1,0 +1,62 @@
+# Human-curated list of the public Origin pages this repo watches.
+# The watcher never adds sources on its own: when a watched index lists a new
+# page, that shows up as a normal diff and a human decides whether to add it.
+#
+# Fields: id (lowercase slug, names the snapshot), url, type (md|yaml|txt|html),
+# expect (string that must appear in the normalized text), note.
+# Optional: min_chars (validation floor, default 200) and section (txt/md only:
+# keep one heading block such as "## origin" and drop the rest of the file).
+# Markdown endpoints are preferred; html is the fallback for pages with no .md form.
+
+sources:
+  - id: openapi
+    url: https://cursor.com/docs/api/origin/openapi.yaml
+    type: yaml
+    expect: "title: Cursor Origin API"
+    min_chars: 10000
+    note: OpenAPI 3.1 spec for the Origin REST API (v1alpha1). Breaking changes land here.
+
+  - id: api-changelog
+    url: https://cursor.com/docs/api/origin/changelog
+    type: html
+    expect: "Origin API Changelog"
+    note: Official API changelog, grouped by day. No Markdown form, so the rendered page is watched.
+
+  - id: api-index
+    url: https://cursor.com/docs/api/origin/llms.txt
+    type: txt
+    expect: "Cursor Origin API"
+    note: Index of the API docs. New or removed endpoint pages show up here.
+
+  - id: api-reference
+    url: https://cursor.com/docs/api/origin/llms-full.txt
+    type: txt
+    expect: "# Origin API"
+    min_chars: 10000
+    note: The complete API reference as one Markdown file (auth, webhooks, scopes, every endpoint).
+
+  - id: docs-index
+    url: https://cursor.com/llms.txt
+    type: txt
+    section: "## origin"
+    expect: "cursor.com/docs/origin"
+    min_chars: 100
+    note: Origin section of the site-wide docs index. New or removed product doc pages show up here.
+
+  - id: docs-origin
+    url: https://cursor.com/docs/origin.md
+    type: md
+    expect: "# Origin"
+    note: Origin overview page, including beta status and who can access it.
+
+  - id: cli-commands
+    url: https://cursor.com/docs/origin/cli/reference/commands.md
+    type: md
+    expect: "# Commands"
+    note: Full command listing for the origin CLI.
+
+  - id: cli-pull-requests
+    url: https://cursor.com/docs/origin/cli/reference/pull-requests.md
+    type: md
+    expect: "origin pr"
+    note: origin pr subcommands and their options.

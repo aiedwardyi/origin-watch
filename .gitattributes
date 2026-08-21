@@ -1,0 +1,3 @@
+* text=auto eol=lf
+snapshots/** text eol=lf
+changes/** text eol=lf

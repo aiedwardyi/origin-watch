@@ -1,0 +1,48 @@
+API
+Origin API Changelog
+The Origin API is in alpha and subject to change. Review the OpenAPI specification when updating an integration.
+Changes to the Origin public API, including endpoints, request and response schemas, scopes, and webhooks, grouped by day with the newest first. Each change carries one label: Breaking, Deprecated, Added, Changed, or Removed. Breaking and deprecated changes include migration guidance inline. The Origin API reference always reflects the latest synced state.
+August 19, 2026
+Added. List Pull Request Labels returns the labels assigned to a pull request, ordered by name: GET /v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels. Requires repository:pull_requests:read. Results are paginated, 30 labels per page by default, and at most 100 labels per page.
+Added. Add Pull Request Labels assigns existing repository labels to a pull request and leaves the labels already on it in place: POST /v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels. Every label write endpoint requires repository:pull_requests:write.
+Added. Set Pull Request Labels replaces every label on a pull request with the names you send, and an empty list clears them: PUT /v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels.
+Added. Remove Pull Request Label removes one label by name and returns the labels left on the pull request: DELETE /v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels/{labelName}.
+Added. Remove All Pull Request Labels clears every label from a pull request and returns 204: DELETE /v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels.
+Added. Label entries carry id, name, color as a six-character hex value without a leading #, and an optional description. Returned by every pull request label endpoint.
+Changed. The app JWT rate limit budget rose from 600 to 6,000 points per minute, and Create Installation Access Token charges 1 point instead of 5, so an app can mint roughly 100 installation tokens per second.
+Changed. Owner eligibility for Create Repo and pushes over Git HTTPS admits the Pro Student and Start plans alongside Pro, Pro+, and Ultra. Team-owner requirements are unchanged.
+Changed. Owner slugs and repository names in repository paths resolve case-insensitively, and responses return the stored casing rather than the casing you sent. Create Repo rejects a name that differs only in case from one the owner already has, so compare repository names case-insensitively.
+August 17, 2026
+Breaking. Git over HTTPS rejects a push with 403 when the repository's owner is not eligible to write to Origin. A user owner must be on a Pro, Pro+, or Ultra plan, and a team owner must have an active paid team plan, must not be on Privacy Mode (Legacy), and must not have Origin turned off by a team admin. Clone, fetch, and pull are unaffected. Migration: handle 403 on push as an owner-eligibility failure that a retry cannot clear, and confirm the owner's plan before pushing on its behalf.
+Changed. The first push to a repo created through Create Repo retargets defaultBranch when that push only creates branches and none of them is the stored default: Origin picks the created branch, or main or master when the push creates several and one of those names is among them. Read the current value from Get Repo.
+August 16, 2026
+Breaking. Create Repo rejects a request whose owner is not eligible to write to Origin, returning FailedPrecondition (HTTP 400). A user owner must be on a Pro, Pro+, or Ultra plan, and a team owner must have an active paid team plan, must not be on Privacy Mode (Legacy), and must not have Origin turned off by a team admin. Migration: handle 400 from Create Repo as an owner-eligibility failure that a retry cannot clear, and confirm the owner's plan before creating repositories on its behalf.
+August 15, 2026
+Breaking. Apps lost access to repositories that Origin mirrors in from GitHub. Those repositories no longer appear in List App Installation Repositories, Create Installation Access Token rejects them in repositoryIds, and a request that names one returns 403 over both the REST API and Git over HTTPS. Migration: discover repositories from List App Installation Repositories instead of a stored repository list, and read a GitHub-sourced repository from GitHub rather than the Origin API.
+Breaking. Origin stopped sending webhooks for repositories it mirrors in from GitHub, and installation event payloads dropped those repositories from their selected repository arrays and repositoriesCount. Migration: source events for a GitHub-sourced repository from GitHub, and treat an installation payload's repository array as the set your app can reach.
+August 14, 2026
+Changed. Revision parameters accept the symbolic HEAD alongside a SHA, branch, or tag: sha on List Commits, Get Commit, List Commit Files, Get Git Commit, and Get Tree; ref on Get Contents and Batch Get Contents; and either side of basehead on Compare Commits.
+Changed. Get Git Ref resolves the symbolic HEAD and returns it as ref: "HEAD" with the tip commit. List Matching Git Refs and List Matching Git Refs by Path match HEAD exactly, because it does not sit under refs/.
+Changed. Removing an installation, or deleting the app, invalidates that installation's access tokens before expiresAt. The REST API and Git over HTTPS reject a revoked token with 401, so an app must be reinstalled before it can mint a working one. See Installation access token.
+August 13, 2026
+Breaking. Get Contents rejects files larger than 1 MiB (decoded) with FailedPrecondition (HTTP 400), and one oversized file fails an entire Batch Get Contents request.
+Added. Installation access tokens authenticate Git over HTTPS. Use the token as the HTTP Basic password with username x-access-token against the repository cloneUrl. Clone, fetch, and pull require repository:contents:read; push requires repository:contents:write. See Git HTTPS authentication.
+Changed. cloneUrl carries the GitHub-shaped root path (https://origin.cursor.com/OWNER_SLUG/REPO_NAME.git) in place of the legacy /git/ path, on List Repos, Get Repo, Create Repo, List App Installation Repositories, and the repository.created webhook payload. Both forms clone and cloneUrl promises no particular path shape, so a stored value keeps working.
+Changed. size on Get Contents and Batch Get Contents responses states the decoded content size in bytes, not the length of the base64 content string.
+August 11, 2026
+Breaking. Reviewer webhook payloads carry a stable external ID in reviewer.id: the encoded user ID (user_…, the same format as the organization API) when kind is user, replacing the provider-scoped auth ID; group reviewers keep the group public ID (grp_…). Affects pull_request.reviewer.added, pull_request.reviewer.removed, and pull_request.reviewer.rerequested. Migration: match user reviewers by the encoded user_… ID wherever your integration compared reviewer.id against stored auth IDs.
+Added. Apps can hold up to 10 active Ed25519 signing keys, and app JWT verification accepts a token signed with any active key.
+Added. Sync Mirror synchronizes one ref of a mirrored repository from its upstream source: POST /v1/origin/repos/{ownerSlug}/{repoName}:syncMirror. Requires repository:contents:read and returns 200 when the sync target is satisfied or 202 while the sync is pending.
+Added. Post-install redirects carry an installation_receipt query parameter: a five-minute Origin-signed JWT that identifies the installation in its sub claim and echoes the publisher's state as a claim. Verify it against the published JWKS before trusting the callback. See Installation receipt.
+Removed. Origin actor objects no longer include the top-level kind and id fields, completing the deprecation announced on August 5, 2026. Every actor, author, and dismissedBy field across check, commit, and pull request responses is affected. Migration: read the user, app, or serviceAccount variant set on the actor.
+August 10, 2026
+Added. Get Rate Limit returns the authenticated principal's shared per-minute point budget without consuming points: GET /v1/origin/rate_limit. See Rate limits.
+August 5, 2026
+Deprecated. OriginActor.kind and OriginActor.id. Actor identity is a discriminated union of user, app, and serviceAccount variants. Migration: read the selected variant's fields instead of top-level kind and id.
+English
+English
+简体中文
+Русский
+日本語
+Português
+Español
