@@ -1,0 +1,50 @@
+name: watch
+
+on:
+  schedule:
+    - cron: "17 0 * * *"  # 00:17 UTC, 09:17 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Watch
+        run: python watch.py --seed
+
+      # Runs even when Watch exits 2 (a source failed) so the successes still land.
+      - name: Push
+        if: ${{ !cancelled() }}
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
+            echo "nothing to push"
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::warning::main moved during the run; not pushing. The next run re-detects the same changes."
+            exit 1
+          fi
+          git push origin HEAD:main
