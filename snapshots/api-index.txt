@@ -120,3 +120,10 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Create Pull Request Review](https://cursor.com/docs/api/origin#create-pull-request-review)
 - [Update Pull Request Review](https://cursor.com/docs/api/origin#update-pull-request-review)
 - [Dismiss Pull Request Review](https://cursor.com/docs/api/origin#dismiss-pull-request-review)
+
+## Rulesets
+
+- [List Rulesets](https://cursor.com/docs/api/origin#list-rulesets)
+- [Create Ruleset](https://cursor.com/docs/api/origin#create-ruleset)
+- [Get Ruleset](https://cursor.com/docs/api/origin#get-ruleset)
+- [Update Ruleset](https://cursor.com/docs/api/origin#update-ruleset)

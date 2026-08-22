@@ -179,15 +179,19 @@ paths:
                  `webhook-id` header the receiver sees. `delivered=false` is the recovery
                  predicate: every delivery the receiver has never acknowledged with a 2xx,
                  regardless of where retries stand.
+
+                 Deliveries are listable for 7 days after creation, and only while the app
+                 has an active installation in the delivery's namespace. App-targeted
+                 lifecycle events (for example `installation.deleted`) stay visible after
+                 the uninstall they describe.
             operationId: OriginService_ListWebhookDeliveries
             parameters:
                 - name: delivered
                   in: query
                   description: |-
                     Compares against `delivered_at`. `delivered=false` is the recovery
-                     predicate: it is evaluated server-side, so it cannot miss a delivery whose
-                     retry ladder exhausted mid-outage the way a caller-supplied time window
-                     silently does.
+                     predicate: it selects every delivery that has never received a 2xx,
+                     including deliveries whose retry ladder exhausted during an outage.
                   schema:
                     type: boolean
                 - name: eventType
@@ -242,17 +246,15 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Asks Origin to send deliveries again. Batch because the caller's input is
-                 a page of ListWebhookDeliveries, so a per-delivery method would put the
-                 recovery loop's request count at the mercy of how many deliveries an
-                 outage produced.
+                Asks Origin to send deliveries again.
 
                  The request means "ensure a send is in flight for each of these", not
                  "add another send". Follows BatchGetContents in returning one result per
                  unique input rather than failing the batch on a bad entry, so a single
                  expired id cannot block the rest of a recovery page.
 
-                 Answers 202: the sends are queued, delivery itself is asynchronous.
+                 Answers 202: the sends are queued, delivery itself is asynchronous. Poll
+                 ListWebhookDeliveries for outcomes.
             operationId: OriginService_BatchRedeliverWebhookDeliveries
             requestBody:
                 content:
@@ -983,7 +985,7 @@ paths:
                  The file path is passed as the `path` query parameter (supports nested
                  paths); omit or leave empty for the repository root directory.
                  Files larger than 1 MiB (decoded) are rejected with FailedPrecondition
-                 (HTTP 400); use `MintRawRepoFileLink` / raw.<host> for larger files.
+                 (HTTP 400); fetch larger files by cloning the repository over Git HTTPS.
             operationId: OriginService_GetContents
             parameters:
                 - name: identifier.ownerSlug
@@ -1096,8 +1098,9 @@ paths:
                  Default response is JSON with MIME-wrapped base64 `content`. Pass
                  `Accept: application/vnd.origin.raw+json` (or `application/vnd.origin.raw`)
                  on the REST surface to receive raw blob bytes instead.
-                 Blobs larger than 4 MiB (decoded) are rejected; use `MintRawRepoFileLink` /
-                 raw.<host> for larger files. Empty repositories return 409 Conflict.
+                 Blobs larger than 4 MiB (decoded) are rejected; fetch larger files by
+                 cloning the repository over Git HTTPS. Empty repositories return 409
+                 Conflict.
             operationId: OriginService_GetBlob
             parameters:
                 - name: identifier.ownerSlug
@@ -1361,8 +1364,9 @@ paths:
             description: |-
                 Returns a Git tree object by SHA or resolvable revision.
                  `sha` accepts a tree SHA, commit SHA, branch, tag, or symbolic ref such as
-                 `HEAD`. Any non-empty `recursive` query value enables recursion, including
-                 `recursive=false`. Recursive listings truncate at
+                 `HEAD`. Set `recursive=true` (or `1`) to walk the whole tree; omitting the
+                 parameter or passing any other value lists immediate children only.
+                 Recursive listings truncate at
                  100,000 entries or 7 MiB and set `truncated=true`. Empty repositories
                  return 409 Conflict.
             operationId: OriginService_GetTree
@@ -1388,10 +1392,11 @@ paths:
                 - name: recursive
                   in: query
                   description: |-
-                    Any non-empty value enables recursion (`1`, `true`, even `false`).
-                     Omit (empty) for a non-recursive listing of immediate children only.
+                    When true, returns the full recursive walk of the tree. Query values
+                     `true` and `1` enable recursion; omitting the parameter or passing any
+                     other value (including `false` and `0`) lists immediate children only.
                   schema:
-                    type: string
+                    type: boolean
             responses:
                 "200":
                     description: OK
@@ -1411,7 +1416,7 @@ paths:
                 - OriginService
             description: |-
                 Lists pull requests in a repo, optionally filtered by head branch and
-                 state.
+                 state. Each pull request includes its assigned labels.
             operationId: OriginService_ListPullRequests
             parameters:
                 - name: identifier.ownerSlug
@@ -1620,7 +1625,7 @@ paths:
         get:
             tags:
                 - OriginService
-            description: Returns a single pull request.
+            description: Returns a single pull request, including its assigned labels.
             operationId: OriginService_GetPullRequest
             parameters:
                 - name: identifier.ownerSlug
@@ -1943,8 +1948,9 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Lists labels assigned to a pull request, ordered by name and paginated
-                 with `page_size` and `page_token`.
+                Lists every label assigned to a pull request, ordered by name. The
+                 response is the full assigned list; a pull request can have at most 100
+                 labels.
             operationId: OriginService_ListPullRequestLabels
             parameters:
                 - name: identifier.ownerSlug
@@ -1962,21 +1968,6 @@ paths:
                 - name: pullNumber
                   in: path
                   required: true
-                  schema:
-                    type: string
-                - name: pageSize
-                  in: query
-                  description: |-
-                    Max labels to return. Defaults to 30 when unset or 0. Values above 100
-                     are clamped to 100.
-                  schema:
-                    type: integer
-                    format: int32
-                - name: pageToken
-                  in: query
-                  description: |-
-                    Opaque cursor from a previous response's `next_page_token`. Empty for the
-                     first page. Encodes the last-seen label name scoped to this pull request.
                   schema:
                     type: string
             responses:
@@ -2213,7 +2204,17 @@ paths:
                     application/json:
                         schema:
                             type: object
-                            properties: {}
+                            properties:
+                                expectedHeadSha:
+                                    type: string
+                                    description: |-
+                                        Optional guard against merging a head the caller has not seen: the full
+                                         commit SHA (40- or 64-character hex) expected to be the pull request's
+                                         current head. When set and the head has moved, the merge is rejected
+                                         with ABORTED (HTTP 409 Conflict) and nothing is merged. Values that are
+                                         not a full commit SHA are rejected with INVALID_ARGUMENT. Not evaluated
+                                         when the pull request is already merged (the call returns idempotent
+                                         success). Omit to merge whatever the current head is.
                 required: true
             responses:
                 "200":
@@ -2514,6 +2515,259 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/PullRequestReview'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /v1/origin/repos/{identifier.ownerSlug}/{identifier.name}/rulesets:
+        get:
+            tags:
+                - OriginService
+            description: |-
+                Lists every ruleset configured on a repository. Returns the full set in
+                 one response (rulesets per repository are bounded configuration).
+            operationId: OriginService_ListRulesets
+            parameters:
+                - name: identifier.ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: identifier.name
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRulesetsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Creates a repository ruleset and returns the created ruleset, including
+                 server-assigned rule and bypass-actor ids.
+            operationId: OriginService_CreateRuleset
+            parameters:
+                - name: identifier.ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: identifier.name
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - name
+                                - enforcement
+                                - kind
+                            type: object
+                            properties:
+                                name:
+                                    type: string
+                                description:
+                                    type: string
+                                enforcement:
+                                    enum:
+                                        - RULESET_ENFORCEMENT_UNSPECIFIED
+                                        - active
+                                        - evaluate
+                                        - disabled
+                                    type: string
+                                    format: enum
+                                kind:
+                                    enum:
+                                        - RULESET_KIND_UNSPECIFIED
+                                        - merge_branch
+                                        - push_branch
+                                        - push_tag
+                                        - push_repository
+                                    type: string
+                                    format: enum
+                                includedRefNames:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Ref name patterns this ruleset includes. Supports globs and the tokens
+                                         `~ALL` and `~DEFAULT_BRANCH`.
+                                excludedRefNames:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Ref name patterns this ruleset excludes. Same pattern language as
+                                         `included_ref_names`.
+                                rules:
+                                    type: array
+                                    items:
+                                        $ref: '#/components/schemas/RulesetRuleInput'
+                                bypassActors:
+                                    type: array
+                                    items:
+                                        $ref: '#/components/schemas/RulesetBypassActorInput'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Ruleset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /v1/origin/repos/{identifier.ownerSlug}/{identifier.name}/rulesets/{rulesetId}:
+        get:
+            tags:
+                - OriginService
+            description: Returns a single repository ruleset by its stable Origin id.
+            operationId: OriginService_GetRuleset
+            parameters:
+                - name: identifier.ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: identifier.name
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+                - name: rulesetId
+                  in: path
+                  description: Stable Origin ruleset id.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Ruleset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - OriginService
+            description: |-
+                Updates an existing repository ruleset. Replaces the ruleset configuration
+                 (including nested rules and bypass actors) and returns the updated
+                 ruleset with server-assigned rule and bypass-actor ids.
+            operationId: OriginService_UpdateRuleset
+            parameters:
+                - name: identifier.ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: identifier.name
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+                - name: rulesetId
+                  in: path
+                  description: Stable Origin ruleset id.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - name
+                                - enforcement
+                                - kind
+                            type: object
+                            properties:
+                                name:
+                                    type: string
+                                description:
+                                    type: string
+                                enforcement:
+                                    enum:
+                                        - RULESET_ENFORCEMENT_UNSPECIFIED
+                                        - active
+                                        - evaluate
+                                        - disabled
+                                    type: string
+                                    format: enum
+                                kind:
+                                    enum:
+                                        - RULESET_KIND_UNSPECIFIED
+                                        - merge_branch
+                                        - push_branch
+                                        - push_tag
+                                        - push_repository
+                                    type: string
+                                    format: enum
+                                includedRefNames:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Ref name patterns this ruleset includes. Supports globs and the tokens
+                                         `~ALL` and `~DEFAULT_BRANCH`.
+                                excludedRefNames:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Ref name patterns this ruleset excludes. Same pattern language as
+                                         `included_ref_names`.
+                                rules:
+                                    type: array
+                                    items:
+                                        $ref: '#/components/schemas/RulesetRuleInput'
+                                bypassActors:
+                                    type: array
+                                    items:
+                                        $ref: '#/components/schemas/RulesetBypassActorInput'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Ruleset'
                 default:
                     description: Default error response
                     content:
@@ -2830,9 +3084,10 @@ components:
                     items:
                         type: string
                     description: |-
-                        Deliveries to send again. At most 100 entries, matching the page_size
-                         ceiling on ListWebhookDeliveries so one page of delivered=false feeds
-                         exactly one batch with no re-chunking. Duplicates are removed.
+                        Deliveries to send again. At most 100 unique entries, matching the
+                         page_size ceiling on ListWebhookDeliveries. Duplicates are removed,
+                         keeping first-seen order. An empty list, or more than 100 unique
+                         entries, is a 400 InvalidArgument.
         BatchRedeliverWebhookDeliveriesResponse:
             type: object
             properties:
@@ -2854,6 +3109,11 @@ components:
                         - already_in_flight
                         - not_found
                     type: string
+                    description: |-
+                        The result for this id: `queued` (a send was created),
+                         `already_in_flight` (a send was already running; success, not an error),
+                         or `not_found`. `not_found` covers unknown ids, ids older than the 7-day
+                         retention window, and namespaces where the app is no longer installed.
                     format: enum
             description: The outcome for one requested delivery id.
         BatchUpsertCheckRunsRequest:
@@ -3514,6 +3774,59 @@ components:
                         The repo to create. Only `name` (required) and `default_branch` (optional;
                          defaults to "main" when omitted) are honored on input; OUTPUT_ONLY fields
                          are ignored.
+        CreateRulesetRequest:
+            required:
+                - identifier
+                - name
+                - enforcement
+                - kind
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                name:
+                    type: string
+                description:
+                    type: string
+                enforcement:
+                    enum:
+                        - RULESET_ENFORCEMENT_UNSPECIFIED
+                        - active
+                        - evaluate
+                        - disabled
+                    type: string
+                    format: enum
+                kind:
+                    enum:
+                        - RULESET_KIND_UNSPECIFIED
+                        - merge_branch
+                        - push_branch
+                        - push_tag
+                        - push_repository
+                    type: string
+                    format: enum
+                includedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset includes. Supports globs and the tokens
+                         `~ALL` and `~DEFAULT_BRANCH`.
+                excludedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset excludes. Same pattern language as
+                         `included_ref_names`.
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetRuleInput'
+                bypassActors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetBypassActorInput'
         DeleteAppInstallationRequest:
             required:
                 - installationId
@@ -3694,6 +4007,17 @@ components:
             properties:
                 identifier:
                     $ref: '#/components/schemas/RepoIdentifier'
+        GetRulesetRequest:
+            required:
+                - identifier
+                - rulesetId
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                rulesetId:
+                    type: string
+                    description: Stable Origin ruleset id.
         GetTagRequest:
             required:
                 - identifier
@@ -3721,10 +4045,11 @@ components:
                     type: string
                     description: Tree SHA, commit SHA, branch, tag, or symbolic ref such as `HEAD`.
                 recursive:
-                    type: string
+                    type: boolean
                     description: |-
-                        Any non-empty value enables recursion (`1`, `true`, even `false`).
-                         Omit (empty) for a non-recursive listing of immediate children only.
+                        When true, returns the full recursive walk of the tree. Query values
+                         `true` and `1` enable recursion; omitting the parameter or passing any
+                         other value (including `false` and `0`) lists immediate children only.
         GitCommit:
             type: object
             properties:
@@ -4314,17 +4639,6 @@ components:
                     $ref: '#/components/schemas/RepoIdentifier'
                 pullNumber:
                     type: string
-                pageSize:
-                    type: integer
-                    description: |-
-                        Max labels to return. Defaults to 30 when unset or 0. Values above 100
-                         are clamped to 100.
-                    format: int32
-                pageToken:
-                    type: string
-                    description: |-
-                        Opaque cursor from a previous response's `next_page_token`. Empty for the
-                         first page. Encodes the last-seen label name scoped to this pull request.
         ListPullRequestLabelsResponse:
             type: object
             properties:
@@ -4332,10 +4646,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Label'
-                nextPageToken:
-                    readOnly: true
-                    type: string
-                    description: Opaque cursor for the next page; empty when there are no more labels.
+                    description: Every label currently assigned to the pull request, sorted by name.
         ListPullRequestRequestedReviewersRequest:
             required:
                 - identifier
@@ -4451,6 +4762,25 @@ components:
                 nextPageToken:
                     type: string
                     description: Opaque cursor for the next page; empty when there are no more pages.
+        ListRulesetsRequest:
+            required:
+                - identifier
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+        ListRulesetsResponse:
+            type: object
+            properties:
+                rulesets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Ruleset'
+                repository:
+                    readOnly: true
+                    allOf:
+                        - $ref: '#/components/schemas/RepositoryReference'
+                    description: Repository shared by every ruleset in this response.
         ListWebhookDeliveriesRequest:
             type: object
             properties:
@@ -4458,9 +4788,8 @@ components:
                     type: boolean
                     description: |-
                         Compares against `delivered_at`. `delivered=false` is the recovery
-                         predicate: it is evaluated server-side, so it cannot miss a delivery whose
-                         retry ladder exhausted mid-outage the way a caller-supplied time window
-                         silently does.
+                         predicate: it selects every delivery that has never received a 2xx,
+                         including deliveries whose retry ladder exhausted during an outage.
                 eventType:
                     type: string
                     description: Exact event type, e.g. `pull_request.created`.
@@ -4506,6 +4835,16 @@ components:
                     description: |-
                         Pull number to merge. When this pull is stacked, the merge lands every
                          pull from the stack root through this number.
+                expectedHeadSha:
+                    type: string
+                    description: |-
+                        Optional guard against merging a head the caller has not seen: the full
+                         commit SHA (40- or 64-character hex) expected to be the pull request's
+                         current head. When set and the head has moved, the merge is rejected
+                         with ABORTED (HTTP 409 Conflict) and nothing is merged. Values that are
+                         not a full commit SHA are rejected with INVALID_ARGUMENT. Not evaluated
+                         when the pull request is already merged (the call returns idempotent
+                         success). Omit to merge whatever the current head is.
         MergePullRequestResponse:
             type: object
             properties:
@@ -4567,7 +4906,16 @@ components:
                     description: Unique URL-friendly name of the owner.
                 id:
                     type: string
-                    description: Unique ID of the owner entity.
+                    description: Unique ID of the owner namespace.
+                type:
+                    readOnly: true
+                    enum:
+                        - TYPE_UNSPECIFIED
+                        - team
+                        - user
+                    type: string
+                    description: '`team` or `user`. Output-only; unset when unknown.'
+                    format: enum
             description: The owner of a repo.
         PostCheckRunRequest:
             required:
@@ -4610,72 +4958,79 @@ components:
             properties:
                 id:
                     type: string
-                    description: Stable Origin change identifier.
+                    description: Stable Origin pull request identifier.
                 number:
                     type: string
-                    description: Change number within its repository.
+                    description: Pull request number within its repository.
                 state:
                     type: string
-                    description: '"open" or "closed". A draft is "open"; merged and closed changes are both "closed".'
+                    description: '"open" or "closed". A draft is "open"; merged and closed pull requests are both "closed".'
                 draft:
                     type: boolean
-                    description: Whether the change is still a draft.
+                    description: Whether the pull request is still a draft.
                 merged:
                     type: boolean
-                    description: Whether the change has been merged.
+                    description: Whether the pull request has been merged.
                 title:
                     type: string
-                    description: Change title.
+                    description: Pull request title.
                 body:
                     type: string
-                    description: Change description.
+                    description: Pull request description.
                 head:
                     allOf:
                         - $ref: '#/components/schemas/PullRequestRef'
-                    description: The source side of the change - what is being merged in.
+                    description: The source side of the pull request - what is being merged in.
                 base:
                     allOf:
                         - $ref: '#/components/schemas/PullRequestRef'
-                    description: The target side of the change — what it merges into.
+                    description: The target side of the pull request — what it merges into.
                 author:
                     allOf:
                         - $ref: '#/components/schemas/OriginActor'
-                    description: The principal that opened the change.
+                    description: The principal that opened the pull request.
                 createdAt:
                     type: string
-                    description: When the change was opened.
+                    description: When the pull request was opened.
                     format: date-time
                 updatedAt:
                     type: string
-                    description: When the change was last updated.
+                    description: When the pull request was last updated.
                     format: date-time
                 closedAt:
                     type: string
-                    description: When the change was closed or merged; unset while open.
+                    description: When the pull request was closed or merged; unset while open.
                     format: date-time
                 mergedAt:
                     type: string
-                    description: When the change was merged; unset unless merged.
+                    description: When the pull request was merged; unset unless merged.
                     format: date-time
                 mergeCommitSha:
                     type: string
                     description: SHA of the resulting merge commit; set once merged.
                 additions:
                     type: integer
-                    description: Lines added by the change's latest version.
+                    description: Lines added by the pull request's latest version.
                     format: int32
                 deletions:
                     type: integer
-                    description: Lines deleted by the change's latest version.
+                    description: Lines deleted by the pull request's latest version.
                     format: int32
                 changedFiles:
                     type: integer
-                    description: Files changed by the change's latest version.
+                    description: Files changed by the pull request's latest version.
                     format: int32
+                labels:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Label'
+                    description: |-
+                        Labels currently assigned to this pull request, sorted by name. Empty when
+                         none are assigned. A pull request can have at most 100 labels.
                 version:
                     allOf:
                         - $ref: '#/components/schemas/PullRequestVersion'
-                    description: The change's latest version.
+                    description: The pull request's latest version.
             description: A pull request.
         PullRequestComment:
             type: object
@@ -4867,13 +5222,87 @@ components:
             description: |-
                 A numbered revision of a change. Each push produces a new version with its
                  own head/base SHAs and diff stats.
+        PullRequestWebhook:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Stable Origin pull request identifier.
+                number:
+                    type: string
+                    description: Pull request number within its repository.
+                state:
+                    type: string
+                    description: '"open" or "closed". A draft is "open"; merged and closed pull requests are both "closed".'
+                draft:
+                    type: boolean
+                    description: Whether the pull request is still a draft.
+                merged:
+                    type: boolean
+                    description: Whether the pull request has been merged.
+                title:
+                    type: string
+                    description: Pull request title.
+                body:
+                    type: string
+                    description: Pull request description.
+                head:
+                    allOf:
+                        - $ref: '#/components/schemas/PullRequestRef'
+                    description: The source side of the pull request - what is being merged in.
+                base:
+                    allOf:
+                        - $ref: '#/components/schemas/PullRequestRef'
+                    description: The target side of the pull request — what it merges into.
+                author:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginActor'
+                    description: The principal that opened the pull request.
+                createdAt:
+                    type: string
+                    description: When the pull request was opened.
+                    format: date-time
+                updatedAt:
+                    type: string
+                    description: When the pull request was last updated.
+                    format: date-time
+                closedAt:
+                    type: string
+                    description: When the pull request was closed or merged; unset while open.
+                    format: date-time
+                mergedAt:
+                    type: string
+                    description: When the pull request was merged; unset unless merged.
+                    format: date-time
+                mergeCommitSha:
+                    type: string
+                    description: SHA of the resulting merge commit; set once merged.
+                additions:
+                    type: integer
+                    description: Lines added by the pull request's latest version.
+                    format: int32
+                deletions:
+                    type: integer
+                    description: Lines deleted by the pull request's latest version.
+                    format: int32
+                changedFiles:
+                    type: integer
+                    description: Files changed by the pull request's latest version.
+                    format: int32
+                version:
+                    allOf:
+                        - $ref: '#/components/schemas/PullRequestVersion'
+                    description: The pull request's latest version.
+            description: |-
+                A pull request snapshot for webhook payloads. Assigned labels are omitted;
+                 GetPullRequest and ListPullRequests return them.
         PullRequestWebhookPayload:
             type: object
             properties:
                 pullRequest:
                     allOf:
-                        - $ref: '#/components/schemas/PullRequest'
-                    description: The pull request itself.
+                        - $ref: '#/components/schemas/PullRequestWebhook'
+                    description: The pull request snapshot. Assigned labels are omitted.
                 repository:
                     allOf:
                         - $ref: '#/components/schemas/RepositoryReference'
@@ -5124,6 +5553,189 @@ components:
                 owner:
                     $ref: '#/components/schemas/Owner'
             description: Stable identity and display coordinates for a repository.
+        Ruleset:
+            type: object
+            properties:
+                id:
+                    readOnly: true
+                    type: string
+                    description: Stable Origin ruleset id.
+                name:
+                    type: string
+                description:
+                    type: string
+                enforcement:
+                    enum:
+                        - RULESET_ENFORCEMENT_UNSPECIFIED
+                        - active
+                        - evaluate
+                        - disabled
+                    type: string
+                    format: enum
+                kind:
+                    enum:
+                        - RULESET_KIND_UNSPECIFIED
+                        - merge_branch
+                        - push_branch
+                        - push_tag
+                        - push_repository
+                    type: string
+                    format: enum
+                includedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset includes. Supports globs and the tokens
+                         `~ALL` and `~DEFAULT_BRANCH`. Create/update reject more than 64 entries;
+                         list/get therefore never paginate this field.
+                excludedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset excludes. Same pattern language and 64-entry
+                         write cap as `included_ref_names`.
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetRule'
+                    description: |-
+                        Protection rules in this ruleset. Create/update reject more than 20
+                         entries; list/get therefore never paginate this field.
+                bypassActors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetBypassActor'
+                    description: |-
+                        Bypass principals for this ruleset. Create/update reject more than 15
+                         entries; list/get therefore never paginate this field.
+            description: |-
+                A named bundle of branch, merge, and push protections for one repository.
+                 This is a stable caller-facing projection: repository coordinates live on
+                 the request path (and are hoisted once on list responses), not on each
+                 ruleset.
+        RulesetAppBypassActor:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: App id (`app_…`).
+            description: An app principal that may bypass ruleset enforcement.
+        RulesetBypassActor:
+            type: object
+            properties:
+                id:
+                    readOnly: true
+                    type: string
+                    description: Stable Origin id for this bypass actor row.
+                bypassMode:
+                    enum:
+                        - RULESET_BYPASS_MODE_UNSPECIFIED
+                        - always
+                        - pull_request_only
+                    type: string
+                    format: enum
+                user:
+                    $ref: '#/components/schemas/RulesetUserBypassActor'
+                team:
+                    $ref: '#/components/schemas/RulesetTeamBypassActor'
+                app:
+                    $ref: '#/components/schemas/RulesetAppBypassActor'
+                originRole:
+                    $ref: '#/components/schemas/RulesetOriginRoleBypassActor'
+            description: |-
+                A principal that may bypass ruleset enforcement. Identity is a typed
+                 `actor` oneof (user, team, app, or Origin role), not a parallel kind enum
+                 plus opaque JSON payload.
+        RulesetBypassActorInput:
+            required:
+                - bypassMode
+            type: object
+            properties:
+                bypassMode:
+                    enum:
+                        - RULESET_BYPASS_MODE_UNSPECIFIED
+                        - always
+                        - pull_request_only
+                    type: string
+                    format: enum
+                user:
+                    $ref: '#/components/schemas/RulesetUserBypassActor'
+                team:
+                    $ref: '#/components/schemas/RulesetTeamBypassActor'
+                app:
+                    $ref: '#/components/schemas/RulesetAppBypassActor'
+                originRole:
+                    $ref: '#/components/schemas/RulesetOriginRoleBypassActor'
+            description: |-
+                Input for one bypass actor when creating a ruleset. Does not include the
+                 server-assigned bypass-actor id.
+        RulesetOriginRoleBypassActor:
+            type: object
+            properties:
+                role:
+                    enum:
+                        - ROLE_UNSPECIFIED
+                        - namespace_admin
+                        - repository_admin
+                        - repository_write
+                    type: string
+                    format: enum
+            description: |-
+                Bypass granted to holders of a policy-backed Origin role. Payload role is
+                 one of `namespace_admin`, `repository_admin`, or `repository_write`.
+        RulesetRule:
+            type: object
+            properties:
+                id:
+                    readOnly: true
+                    type: string
+                    description: Stable Origin id for this rule row.
+                ruleType:
+                    type: string
+                    description: |-
+                        Rule type string, for example `pull_request`, `require_status_checks`,
+                         `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+                parameters:
+                    type: object
+                    description: Type-specific parameters as a JSON object. Shape depends on `rule_type`.
+            description: One rule inside a repository ruleset.
+        RulesetRuleInput:
+            required:
+                - ruleType
+            type: object
+            properties:
+                ruleType:
+                    type: string
+                    description: |-
+                        Rule type string, for example `pull_request`, `require_status_checks`,
+                         `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+                parameters:
+                    type: object
+                    description: Type-specific parameters as a JSON object. Shape depends on `rule_type`.
+            description: |-
+                Input for one rule when creating a ruleset. Does not include the
+                 server-assigned rule id.
+        RulesetTeamBypassActor:
+            type: object
+            properties:
+                organizationPublicId:
+                    type: string
+                groupPublicId:
+                    type: string
+            description: |-
+                A team principal that may bypass ruleset enforcement. Identity is the
+                 immutable org/group `public_id` pair (never mutable slugs).
+        RulesetUserBypassActor:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: |-
+                        Numeric maindb user id, encoded as a decimal string. Internal upsert
+                         stamps the actor-registry id (`act_…`) from this value.
+            description: A user principal that may bypass ruleset enforcement.
         SetPullRequestLabelsRequest:
             required:
                 - identifier
@@ -5277,6 +5889,66 @@ components:
                     description: |-
                         Replacement review summary text; replaces the prior body in full. Must
                          contain a non-whitespace character; INVALID_ARGUMENT otherwise.
+        UpdateRulesetRequest:
+            required:
+                - identifier
+                - rulesetId
+                - name
+                - enforcement
+                - kind
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                rulesetId:
+                    type: string
+                    description: Stable Origin ruleset id.
+                name:
+                    type: string
+                description:
+                    type: string
+                enforcement:
+                    enum:
+                        - RULESET_ENFORCEMENT_UNSPECIFIED
+                        - active
+                        - evaluate
+                        - disabled
+                    type: string
+                    format: enum
+                kind:
+                    enum:
+                        - RULESET_KIND_UNSPECIFIED
+                        - merge_branch
+                        - push_branch
+                        - push_tag
+                        - push_repository
+                    type: string
+                    format: enum
+                includedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset includes. Supports globs and the tokens
+                         `~ALL` and `~DEFAULT_BRANCH`.
+                excludedRefNames:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Ref name patterns this ruleset excludes. Same pattern language as
+                         `included_ref_names`.
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetRuleInput'
+                bypassActors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RulesetBypassActorInput'
+            description: |-
+                Same configuration body as `CreateRulesetRequest`, plus the ruleset id on
+                 the path. Nested rules and bypass actors are fully replaced.
         WebhookApp:
             type: object
             properties:
@@ -5324,9 +5996,6 @@ components:
             description: |-
                 A delivery obligation: one event owed to one app. Its id is the
                  `webhook-id` header the receiver sees, stable across every attempt.
-
-                 Carries no scheduler field. Retry state is internal, and the only durable
-                 answer to "did this land" is `delivered_at`.
         WebhookDeliveryAttempt:
             type: object
             properties:
