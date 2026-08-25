@@ -94,7 +94,7 @@ Installations use one of two repository-selection modes:
 - `all`: the installation can access every repository owned by the selected target.
 - `selected`: the installation can access only repositories selected by the workspace admin.
 
-Neither mode covers a repository that Origin mirrors in from GitHub. An installation reaches native Origin repositories and repositories Origin mirrors out to GitHub. A repository mirrored in from GitHub stays outside the installation, so it never appears in `GET /installation/repos`, and a request that names it returns `403`.
+Both modes cover mirrored repositories as well as native Origin ones, so a mirror appears in `GET /installation/repos` and can be selected. A mirror is read-only until it becomes a stable outbound mirror: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 Use `GET /installation/repos` with an installation token to discover the repositories available to that installation. App JWT endpoints can list, inspect, and delete the app's installations. Deleting an installation prevents new tokens from being minted.
 
@@ -241,6 +241,8 @@ git -c credential.helper="!f() { echo username=x-access-token; echo password=${I
 
 The Origin CLI credential helper is for user logins. App integrations pass the installation token as shown here. Treat the token like a password, never log it, and mint a fresh one before `expiresAt` when a job still needs Git access.
 
+On a mirrored repository, an installation token clones, fetches, and pulls, and Origin rejects `git push` with `403` until the mirror becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
+
 ### User-authenticated CLI requests
 
 After signing in with the [Origin CLI](https://cursor.com/docs/api/origin/llms-full.txt#origin-cli), use `origin api` for user-authenticated requests. The CLI resolves the user's credential and sends it as a Bearer token. App integrations should use app JWTs and installation access tokens instead.
@@ -304,9 +306,20 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 | `repository:checks:read`                 | Read check suites and runs.                                                                                                                              |
 | `repository:checks:write`                | Create and update check suites and runs.                                                                                                                 |
 | `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                |
-| `repository:rulesets:write`              | Create and update repository rulesets.                                                                                                                   |
+| `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                          |
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
+
+### Mirrored repositories
+
+An installation uses every scope it holds on a native Origin repository and on a stable outbound mirror. On a repository in any other mirror state, only two scopes apply:
+
+- `repository:metadata:read`
+- `repository:contents:read`
+
+Every other scope returns `403` on that repository, whatever the workspace admin approved. Over the REST API, repository and contents reads, commit comparison, and [Sync Mirror](https://cursor.com/docs/api/origin/llms-full.txt#sync-mirror) keep working, and Origin rejects pull requests, reviews, comments, checks, rulesets, and every write. Over Git HTTPS, clone, fetch, pull, and LFS download keep working, and Origin rejects push and LFS upload.
+
+The `mirror` object on a repository does not tell you whether writes are allowed. A mirror partway through a transition can report `mirror.status` as `outbound` and still be read-only, so treat the `403` as authoritative rather than branching on `mirror.status`.
 
 ## Rate limits
 
@@ -372,7 +385,7 @@ Delivery is at least once. Deduplicate retries with `webhook-id`, durably accept
 
 Origin retries transport errors, `429`, and `5xx` responses up to six total attempts. Retry delays are 30 seconds, 1 minute, 2 minutes, 4 minutes, and 8 minutes. Other `4xx` responses are terminal.
 
-Origin sends no events for a repository mirrored in from GitHub, and installation event payloads leave those repositories out of the selected repository arrays.
+Origin delivers events for mirrored repositories, and installation event payloads list them in the selected repository arrays. Delivery does not widen what the installation can call: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 ### Headers
 
@@ -497,7 +510,11 @@ Each request wraps the event payload with delivery, app, and installation identi
 | `repository.check_run.completed`    | A check run completes.                        |
 | `installation.created`              | The app is installed.                         |
 | `installation.updated`              | Scopes or repository selection change.        |
+| `installation.suspended`            | The installation is suspended.                |
+| `installation.unsuspended`          | A suspended installation is restored.         |
 | `installation.deleted`              | The app is uninstalled.                       |
+
+The five `installation.*` events go to the app itself rather than to a repository subscription. Origin always sends them, so they do not appear in the app's selectable event list. Every other event in this table is a repository-scoped subscription.
 
 ### Payload families
 
@@ -546,6 +563,10 @@ Use the HTTP status and `code` to branch on errors. Treat `message` as developer
 
 Repository-scoped paths take the owner slug and repository name as `{ownerSlug}/{repoName}`. Both segments resolve case-insensitively, so any casing addresses the repository. Responses return the stored name and slug rather than the casing you sent, and Git HTTPS URLs resolve the same way. Compare repository names case-insensitively, and read the canonical casing from [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo).
 
+Every repository-scoped path also accepts the repository's stable ID in place of the pair: send `_` as the owner slug and the ID as the repository name, as in `GET /v1/origin/repos/_/REPO_ID`. Read the ID from the `id` field on [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo). The sentinel `_` cannot be claimed as an owner slug, so the two forms never collide. In a Connect or JSON request, set `ownerSlug` to `_` and `name` to the ID.
+
+The ID form survives a rename, which makes it the stable way to address a repository. It grants nothing on its own: after Origin resolves the ID to a repository, your app still needs the same scope on that repository. An ID your app cannot reach returns the same `404` body as an ID that does not exist, so a response never confirms that a repository exists. A malformed ID returns `400`. [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) takes an owner slug alone and rejects `_`.
+
 ### Resource references
 
 Resource snapshots contain the resource's current fields. Container context uses compact references instead of duplicating complete resources:
@@ -563,7 +584,7 @@ Resource snapshots contain the resource's current fields. Container context uses
 - Reviewer add, remove, and rerequest operations are webhook-only.
 - Push webhooks do not include a complete commit list.
 - Pull request merge supports native Origin repositories. Mirrored repositories are rejected.
-- Apps cannot reach a repository that Origin mirrors in from GitHub. Origin leaves those repositories out of installations, installation access tokens, and webhook deliveries.
+- A mirrored repository is read-only for an installation until it becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 ## Implementation checklist
 
@@ -934,7 +955,7 @@ Creates an installation access token for the authenticated app.
 
 Requires app signing-JWT authentication, like GetAuthenticatedApp. The token is scoped to the named installation, which must belong to the authenticated app. Callers may attenuate the token to a subset of the installation's accepted scopes and accessible repositories.
 
-Origin rejects a request whose `repositoryIds` names a repository mirrored in from GitHub, because that repository is not accessible to the installation.
+`repositoryIds` can name a mirrored repository. The resulting token carries the installation's scopes, and Origin still applies the mirror ceiling on each request: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 #### Path Parameters
 
@@ -989,7 +1010,7 @@ Requires an installation access token (`oit_`) minted by CreateInstallationAcces
 
 Partners discover their repositories through this endpoint. List entries are sparse repository summaries; use [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) for full timestamps. [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) includes the output-only `cloneUrl`.
 
-Results leave out repositories that Origin mirrors in from GitHub, because an installation cannot reach them.
+Results include mirrored repositories. A mirror is read-only until it becomes a stable outbound mirror: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 #### Query Parameters
 
@@ -6508,7 +6529,7 @@ curl --request GET \
 
 /v1/origin/repos///pulls//comments
 
-Creates a general-discussion comment or reply on an Origin pull request. Omitting `thread_id` starts a new thread; providing it replies to that thread. These are general-discussion comments, not diff-anchored review comments.
+Creates a general-discussion comment or reply on an Origin pull request. Omitting `thread_id` starts a new thread; providing it replies to that thread. These are general-discussion comments, not diff-anchored review comments. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
 
 #### Path Parameters
 
@@ -6525,6 +6546,8 @@ Repo name, unique to the owner entity.
 #### Request Body
 
 `body` string Required
+
+Comment text. Maximum length: 65,536 characters, counted as Unicode code points.
 
 `threadId` string
 
@@ -6628,7 +6651,7 @@ curl --request POST \
 
 Updates a pull request comment by its stable Origin id.
 
-Replaces the comment body. The comment must belong to the repository in the path, be visible to the caller, and have been authored by that caller. Cross-repository and hidden pending-review comments return `404`; a visible comment owned by another actor returns `403`.
+Replaces the comment body. The comment must belong to the repository in the path, be visible to the caller, and have been authored by that caller. Cross-repository and hidden pending-review comments return `404`; a visible comment owned by another actor returns `403`. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
 
 #### Path Parameters
 
@@ -6645,6 +6668,8 @@ Repo name, unique to the owner entity.
 #### Request Body
 
 `body` string Required
+
+Replacement comment text. Maximum length: 65,536 characters, counted as Unicode code points.
 
 #### Response Fields
 
@@ -9130,6 +9155,44 @@ curl --request PUT \
     }
   ]
 }
+```
+
+### Delete Ruleset
+
+/v1/origin/repos///rulesets/
+
+Deletes a repository ruleset by its stable Origin ID. The response body is empty.
+
+An unknown repository and an unknown ruleset both return `404`; the message distinguishes them. A ruleset stored on a different repository reads as an unknown ruleset. An empty `rulesetId` returns `InvalidArgument` (HTTP 400).
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`rulesetId` string Required
+
+Stable Origin ruleset ID.
+
+#### Response Fields
+
+Successful requests return no response body.
+
+```bash
+curl --request DELETE \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/rulesets/RULESET_ID' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response:**
+
+```text
+204 No Content
 ```
 
 
