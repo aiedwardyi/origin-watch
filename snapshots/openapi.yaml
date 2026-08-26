@@ -275,6 +275,40 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /v1/origin/app/webhook/pings:
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Sends a synthetic `ping` test delivery to the authenticated app's
+                 configured webhook URL and reports the receiver's response, so a
+                 receiver can be verified during setup without waiting for a real event.
+
+                 The ping is signed exactly like production deliveries (Standard Webhooks
+                 headers; verify against `/v1/origin/keys`) with event type `ping` and a
+                 payload identifying the app. It is sent once, synchronously, with no
+                 retries, and does not appear in ListWebhookDeliveries. Requires a
+                 configured webhook URL; rejected with FAILED_PRECONDITION otherwise.
+            operationId: OriginService_PingWebhook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PingWebhookRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PingWebhookResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /v1/origin/installation/repos:
         get:
             tags:
@@ -4962,6 +4996,34 @@ components:
                     description: '`team` or `user`. Output-only; unset when unknown.'
                     format: enum
             description: The owner of a repo.
+        PingWebhookRequest:
+            type: object
+            properties: {}
+        PingWebhookResponse:
+            type: object
+            properties:
+                deliveryId:
+                    readOnly: true
+                    type: string
+                    description: Standard Webhooks `webhook-id` of the test delivery.
+                eventId:
+                    readOnly: true
+                    type: string
+                    description: Event id inside the signed envelope (`event.id`).
+                delivered:
+                    readOnly: true
+                    type: boolean
+                    description: |-
+                        True when the receiver answered with a 2xx status within the delivery
+                         timeout. Always present in JSON responses (explicit presence keeps
+                         `false` from being omitted as a proto3 default).
+                responseStatusCode:
+                    readOnly: true
+                    type: integer
+                    description: |-
+                        HTTP status the receiver answered with; 0 when no response arrived
+                         (connection failure or timeout). Always present in JSON responses.
+                    format: int32
         PostCheckRunRequest:
             required:
                 - identifier
@@ -5854,8 +5916,9 @@ components:
                 synced:
                     type: boolean
                     description: |-
-                        True when the sync target is known to be satisfied. Prefer the HTTP status
-                         (200 vs 202): proto3 JSON omits this field when false.
+                        True when the sync target is known to be satisfied; false while the sync
+                         is still pending. Always present in JSON responses, mirroring the HTTP
+                         status (200 when true, 202 when false).
         TaggedObject:
             type: object
             properties:

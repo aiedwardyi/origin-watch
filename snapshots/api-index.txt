@@ -61,6 +61,7 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [List App Installation Repositories](https://cursor.com/docs/api/origin#list-app-installation-repositories)
 - [List Webhook Deliveries](https://cursor.com/docs/api/origin#list-webhook-deliveries)
 - [Batch Redeliver Webhook Deliveries](https://cursor.com/docs/api/origin#batch-redeliver-webhook-deliveries)
+- [Ping Webhook](https://cursor.com/docs/api/origin#ping-webhook)
 
 ## Repositories
 

@@ -2,6 +2,13 @@ API
 Origin API Changelog
 The Origin API is in alpha and subject to change. Review the OpenAPI specification when updating an integration.
 Changes to the Origin public API, including endpoints, request and response schemas, scopes, and webhooks, grouped by day with the newest first. Each change carries one label: Breaking, Deprecated, Added, Changed, or Removed. Breaking and deprecated changes include migration guidance inline. The Origin API reference always reflects the latest synced state.
+August 25, 2026
+Added. Ping Webhook sends a test delivery to your app's configured webhook URL and reports what the receiver answered: POST /v1/origin/app/webhook/pings. The delivery is signed like a production one, carries webhook-event-type of ping, and belongs to no installation. Origin sends it once with no retries, and it never appears in List Webhook Deliveries. An app with no webhook URL configured is rejected with FailedPrecondition (HTTP 400).
+Added. Error responses carry the request ID twice: an X-Request-ID response header, and a google.rpc.RequestInfo entry in details. Origin echoes the x-request-id you sent or generates one when you send none, and includes the entry even when the message is an opaque internal error. See Errors.
+Changed. Create Pull Request and Update Pull Request reject a title longer than 256 characters, or a body longer than 65,536 characters, with InvalidArgument (HTTP 400). Values past those lengths previously failed with an internal error. Both limits count Unicode code points, so an astral character such as an emoji counts once.
+Changed. Sync Mirror responses always carry synced, true or false, mirroring the HTTP status: 200 when true, 202 when false. The field was previously omitted when false, so callers had to read an absent field as false.
+Changed. Unmatched paths under /v1/origin, and requests that use the wrong method on a known path, return the documented error envelope rather than a generic router body. The message names the method and path and never echoes the query string.
+Changed. Merging a pull request delivers a repository.pushed webhook for the base ref the merge advances. Origin performs that push itself, so the event names no pusher. Base-ref updates from a merge were previously not delivered.
 August 24, 2026
 Changed. Create Pull Request Comment and Update Pull Request Comment reject a body longer than 65,536 characters with InvalidArgument (HTTP 400). A body past that length previously failed with an internal error. The limit counts Unicode code points, so an astral character such as an emoji counts once.
 August 22, 2026
