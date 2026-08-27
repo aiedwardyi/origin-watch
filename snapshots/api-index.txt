@@ -76,6 +76,8 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Post Check Run](https://cursor.com/docs/api/origin#post-check-run)
 - [Batch Upsert Check Runs](https://cursor.com/docs/api/origin#batch-upsert-check-runs)
 - [Get Check Run](https://cursor.com/docs/api/origin#get-check-run)
+- [List Check Run Annotations](https://cursor.com/docs/api/origin#list-check-run-annotations)
+- [Create Check Run Annotations](https://cursor.com/docs/api/origin#create-check-run-annotations)
 - [Get Check Suite](https://cursor.com/docs/api/origin#get-check-suite)
 - [List Check Runs For Suite](https://cursor.com/docs/api/origin#list-check-runs-for-suite)
 - [List Check Runs For Commit](https://cursor.com/docs/api/origin#list-check-runs-for-commit)
@@ -99,6 +101,14 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [List Matching Git Refs by Path](https://cursor.com/docs/api/origin#list-matching-git-refs-by-path)
 - [Get Tag](https://cursor.com/docs/api/origin#get-tag)
 - [Get Tree](https://cursor.com/docs/api/origin#get-tree)
+
+## Labels
+
+- [List Labels](https://cursor.com/docs/api/origin#list-labels)
+- [Create Label](https://cursor.com/docs/api/origin#create-label)
+- [Get Label](https://cursor.com/docs/api/origin#get-label)
+- [Delete Label](https://cursor.com/docs/api/origin#delete-label)
+- [Update Label](https://cursor.com/docs/api/origin#update-label)
 
 ## Pull requests
 
