@@ -293,29 +293,33 @@ curl https://api.cursor.com/v1/origin/keys
 }
 ```
 
-Cache the JWKS. Webhook signatures do not carry a key ID, so verification should try each active Ed25519 key. Installation receipts carry the signing key's `kid` in their JOSE header, so receipt verification can resolve the key directly.
+Cache the JWKS. `/keys` sends `Cache-Control: public, max-age=600, stale-if-error=600`, so reuse a cached response for 10 minutes, then refresh; if a refresh fails, keep the last good keys for at most another 10 minutes before failing verification. Also refresh on a signature that no key verifies, which drops a retired key ID. Keys rotate weekly.
+
+Webhook signatures do not carry a key ID, so verification should try each active Ed25519 key. Installation receipts carry the signing key's `kid` in their JOSE header, so receipt verification can resolve the key directly.
 
 ## Scopes
 
 Request only the minimum scopes your app needs. `repository:metadata:read` and app or installation metadata access are granted automatically and should not be added separately to installation URLs.
 
-| Scope                                    | Allows                                                                                                                                                   |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `repository:metadata:read`               | Read repository metadata. Added automatically.                                                                                                           |
-| `repository:contents:read`               | Read commits, branches, contents, and low-level Git objects. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source. |
-| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests.                                                                                                                |
-| `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, and assigned labels.                                                                            |
-| `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                  |
-| `repository:pull_requests:reviews:read`  | Read pull request comments and submitted reviews.                                                                                                        |
-| `repository:pull_requests:reviews:write` | Create and update comments; create, update, and dismiss reviews.                                                                                         |
-| `repository:checks:read`                 | Read check suites, runs, and check run annotations.                                                                                                      |
-| `repository:checks:write`                | Create and update check suites and runs. Append check run annotations.                                                                                   |
-| `repository:labels:read`                 | Read the label definitions a repository owns.                                                                                                            |
-| `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                 |
-| `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                |
-| `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                          |
+| Scope                                    | Allows                                                                                                                                                                                                    |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository:metadata:read`               | Read repository metadata. Added automatically.                                                                                                                                                            |
+| `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source. |
+| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests.                                                                                                                                                                 |
+| `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, and assigned labels.                                                                                                                             |
+| `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                                                                   |
+| `repository:pull_requests:reviews:read`  | Read pull request comments, comment threads, submitted reviews, and requested reviewers.                                                                                                                  |
+| `repository:pull_requests:reviews:write` | Create and update comments; resolve and reopen comment threads; create, update, and dismiss reviews; request and remove reviewers.                                                                        |
+| `repository:checks:read`                 | Read check suites, runs, and check run annotations.                                                                                                                                                       |
+| `repository:checks:write`                | Create and update check suites and runs. Append check run annotations.                                                                                                                                    |
+| `repository:labels:read`                 | Read the label definitions a repository owns.                                                                                                                                                             |
+| `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                                                                  |
+| `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                                                                 |
+| `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                                                                           |
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
+
+The table covers the scopes an app requests at installation. To look up the scope a single operation requires, read its `x-origin-scopes` extension in the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml). That extension covers every operation, including the `app`, `installation`, and `namespace` scopes that come with the credential itself rather than from an installation grant.
 
 ### Mirrored repositories
 
@@ -340,12 +344,12 @@ The Origin API uses a shared per-principal point budget that resets on a rolling
 
 Every endpoint charges a fixed cost against that budget before the handler runs. Authentication and authorization failures are not charged.
 
-| Cost | Operations                                                                                                                                                                                                                                                                            |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                         |
-| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                  |
-| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), and [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files) |
-| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                   |
+| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                           |
+| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                    |
+| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), and [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) |
+| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                                                                                                     |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -499,39 +503,41 @@ Each request wraps the event payload with delivery, app, and installation identi
 
 ### Events
 
-| Event                               | Delivered when                                                      |
-| ----------------------------------- | ------------------------------------------------------------------- |
-| `repository.pushed`                 | One or more refs change in a push.                                  |
-| `pull_request.created`              | A pull request opens.                                               |
-| `pull_request.head_ref.pushed`      | The pull request head advances.                                     |
-| `pull_request.base_ref.updated`     | The base ref or resolved base commit changes.                       |
-| `pull_request.metadata.updated`     | The title or description changes.                                   |
-| `pull_request.closed`               | A pull request closes without merging.                              |
-| `pull_request.merged`               | A pull request merges.                                              |
-| `pull_request.reopened`             | A closed pull request reopens.                                      |
-| `pull_request.published`            | A draft becomes open.                                               |
-| `pull_request.comment.created`      | A visible pull request comment is created.                          |
-| `pull_request.review.submitted`     | A review is submitted with any verdict.                             |
-| `pull_request.review.dismissed`     | A submitted review is dismissed, explicitly or by being superseded. |
-| `pull_request.reviewer.added`       | A reviewer is requested.                                            |
-| `pull_request.reviewer.removed`     | A reviewer is removed.                                              |
-| `pull_request.reviewer.rerequested` | A reviewer is requested again.                                      |
-| `repository.check_run.created`      | A check run is created.                                             |
-| `repository.check_run.completed`    | A check run completes.                                              |
-| `installation.created`              | The app is installed.                                               |
-| `installation.updated`              | Scopes or repository selection change.                              |
-| `installation.suspended`            | The installation is suspended.                                      |
-| `installation.unsuspended`          | A suspended installation is restored.                               |
-| `installation.deleted`              | The app is uninstalled.                                             |
+| Event                               | Delivered when                                                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository.pushed`                 | One or more refs change in a push.                                                                                                           |
+| `pull_request.created`              | A pull request opens.                                                                                                                        |
+| `pull_request.head_ref.pushed`      | The pull request head advances.                                                                                                              |
+| `pull_request.base_ref.updated`     | The base ref or resolved base commit changes.                                                                                                |
+| `pull_request.metadata.updated`     | The title or description changes.                                                                                                            |
+| `pull_request.closed`               | A pull request closes without merging, including when Origin closes it because a push left its head with no history in common with its base. |
+| `pull_request.merged`               | A pull request merges.                                                                                                                       |
+| `pull_request.reopened`             | A closed pull request reopens.                                                                                                               |
+| `pull_request.published`            | A draft becomes open.                                                                                                                        |
+| `pull_request.comment.created`      | A visible pull request comment is created.                                                                                                   |
+| `pull_request.review.submitted`     | A review is submitted with any verdict.                                                                                                      |
+| `pull_request.review.dismissed`     | A submitted review is dismissed, explicitly or by being superseded.                                                                          |
+| `pull_request.reviewer.added`       | A reviewer is requested.                                                                                                                     |
+| `pull_request.reviewer.removed`     | A reviewer is removed.                                                                                                                       |
+| `pull_request.reviewer.rerequested` | A reviewer is requested again.                                                                                                               |
+| `repository.check_run.created`      | A check run is created.                                                                                                                      |
+| `repository.check_run.completed`    | A check run completes.                                                                                                                       |
+| `installation.created`              | The app is installed.                                                                                                                        |
+| `installation.updated`              | Scopes or repository selection change.                                                                                                       |
+| `installation.suspended`            | The installation is suspended.                                                                                                               |
+| `installation.unsuspended`          | A suspended installation is restored.                                                                                                        |
+| `installation.deleted`              | The app is uninstalled.                                                                                                                      |
 
 The five `installation.*` events go to the app itself rather than to a repository subscription. Origin always sends them, so they do not appear in the app's selectable event list. Every other event in this table is a repository-scoped subscription.
+
+Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories and to outbound mirrors are delivered as usual, and the mirror state does not affect any other event.
 
 ### Payload families
 
 - Pull request lifecycle events contain a `pullRequest` snapshot and `repository` reference. Route on `event.type`; there is no separate action field. The snapshot omits the pull request's assigned `labels`; read them from [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) or [List Pull Requests](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-requests).
-- Comment events contain a `pullRequest` reference and the affected `comment`.
+- Comment events contain a `pullRequest` reference and the affected `comment`. A comment that opened its thread carries the thread's anchor inline: `comment.thread` holds the filed-against `version`, `path`, `side`, `startLine`, and `endLine`, so a receiver can materialize the thread without a follow-up read. A reply carries `comment.thread.id` only. Resolution state is not part of the event; read it from [Get Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-comment) or [List Pull Request Comments](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-comments). Comments filed with a review stay silent until the review submits, and then each one emits its own event.
 - Review events contain a `pullRequest` reference and the affected `review`. Both `pull_request.review.submitted` and `pull_request.review.dismissed` use this shape; on a dismissal the review carries `review.dismissal` with the dismissing actor, timestamp, and message. A review superseded by a newer decision carries a server-generated message.
-- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user.id` is the encoded user ID (`user_…`, the same format as the organization API), and `reviewer.group.id` is the group public ID (`grp_…`). There is no public HTTP API to add, remove, or rerequest reviewers.
+- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user.id` is the encoded user ID (`user_…`, the same format as the organization API), and `reviewer.group.id` is the group public ID (`grp_…`). Read the current pending set with [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers), and change it with [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers) or [Remove Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#remove-pull-request-requested-reviewers).
 - Check events contain `repository`, `checkSuite`, `checkRun`, and `actor`.
 - Push events contain one repository snapshot and up to 100 `refUpdates`. `refUpdatesCount` is authoritative. Optional tip metadata is best effort and does not provide a complete commits array. Merging a pull request advances the base ref, and that update is delivered as a push event; because Origin itself performs the merge push, the event names no pusher.
 - Installation events contain the installation snapshot and app identity. The snapshot carries `installedBy`, the user who originally installed the app, on all five `installation.*` events. Selected repository arrays may be capped at 5,000; `repositoriesCount` is authoritative.
@@ -569,6 +575,10 @@ Common HTTP statuses are `400`, `401`, `403`, `404`, `429`, `500`, and `503`. So
 
 Use the HTTP status and `code` to branch on errors. Treat `message` as developer-facing text.
 
+A `404` never distinguishes a resource that does not exist from one your app cannot reach. Read it as "not available to this installation" rather than as proof the resource is absent.
+
+`details` carries typed entries: `google.rpc.BadRequest` field violations on an invalid argument, and a `google.rpc.RequestInfo` entry on every error. Origin can add detail types at any time, so ignore entries your integration does not recognize.
+
 Every error response carries the request ID twice: in an `X-Request-ID` response header, and as a `google.rpc.RequestInfo` entry in `details`. Origin echoes the `x-request-id` you sent, or generates one when you send none. The `RequestInfo` entry is present even when `message` is an opaque internal error, so quote the request ID when you contact Cursor about a failed call.
 
 Unmatched paths under `/v1/origin`, and requests that use the wrong method on a known path, return this same body rather than a generic router error. The message names the method and path and never echoes the query string.
@@ -593,9 +603,8 @@ Resource snapshots contain the resource's current fields. Container context uses
 ## Current limitations
 
 - Namespace-wide repository listing and repository creation are not part of the partner API. Discover repositories through the installation.
-- Commit comparison returns summary data rather than a paginated compare-file or compare-commit stream.
-- Pull request comments expose thread IDs, but there is no first-class thread or resolution API.
-- Reviewer add, remove, and rerequest operations are webhook-only.
+- Commit comparison returns summary data rather than an embedded commit list. Changed files have their own paginated endpoint, [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files).
+- Threads are addressable only for resolution. There is no endpoint that lists threads directly; read them from the comments they contain.
 - Push webhooks do not include a complete commit list.
 - Pull request merge supports native Origin repositories. Mirrored repositories are rejected.
 - A mirrored repository is read-only for an installation until it becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
@@ -616,7 +625,7 @@ Resource snapshots contain the resource's current fields. Container context uses
 
 ## Endpoint reference
 
-Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and every operation lists `400`, `401`, `403`, and `429` responses alongside its success response. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`.
+Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and each operation lists the response codes that operation can return, plus a request and response example. Every operation also carries an `x-origin-scopes` extension: `scopes` holds the scope the operation requires, and `tokenTypes` holds the credential kinds it accepts. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`.
 
 The JSON snippets show schema-shaped placeholder values. Response field descriptions reflect the OpenAPI schema and current platform contract.
 
@@ -1893,6 +1902,55 @@ curl --request GET \
 }
 ```
 
+### Get Repo Tarball
+
+/v1/origin/repos///tarball/
+
+Downloads a gzip-compressed tar of the repository tree at `ref`.
+
+Origin keys the archive on the repository and the commit `ref` resolves to. The first request for a given commit responds `200` with `Content-Type: application/gzip` and streams the archive as the response body. Later requests for the same commit respond `302` with an empty body and a signed download URL in `Location`, valid for 15 minutes; follow the redirect to fetch the bytes. Archive entries sit at the root of the tar, with no wrapping directory. An empty repository returns `ABORTED` (HTTP 409 Conflict), and a ref that does not resolve returns `404`.
+
+Send the ref as a query parameter instead of a path segment to address a ref containing "/": `GET /v1/origin/repos/{ownerSlug}/{repoName}/tarball?ref=refs/heads/main`. Omit it to archive the repository's default branch.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`ref` string Required
+
+Commit SHA (full or abbreviated hex), bare branch or tag name, fully qualified `refs/heads/...` or `refs/tags/...`, or symbolic `HEAD`. Not a glob or revspec, so `<rev>~3` is rejected. Empty uses the repository default branch.
+
+#### Response Fields
+
+`sha` string
+
+Resolved commit object ID: 40- or 64-character hex. Returned to Connect and JSON callers; over REST, read it from the archive filename or the signed URL.
+
+`downloadUrl` string
+
+Short-lived signed download URL, valid for 15 minutes. Empty when the response streams the archive inline, which is the first request for this repository and commit. Over REST the same URL is sent as the `Location` header on the `302`.
+
+```bash
+curl --request GET --location --output repo.tar.gz \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/tarball/HEAD' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "downloadUrl": "string",
+  "sha": "string"
+}
+```
+
 ### Sync Mirror
 
 /v1/origin/repos//:syncMirror
@@ -1968,7 +2026,9 @@ Upserts a check suite + check run using an installation access token with `repos
 
 The endpoint atomically resolves or creates the suite attempt and upserts one run attempt. `externalUpdatedAt` orders updates to the same run identity; stale retries cannot overwrite newer state.
 
-`deadlineAt` records an optional deadline on the run. Origin stores it, returns it on reads, and clears it once the run reaches `completed`; it does not change a run's status when the deadline passes. A deadline more than 24 hours in the future is rejected with `InvalidArgument` (HTTP 400) rather than clamped.
+`deadlineAt` records an optional deadline on the run. Origin stores it, returns it on reads, and clears it once the run reaches `completed`. A deadline more than 24 hours in the future is rejected with `InvalidArgument` (HTTP 400) rather than clamped.
+
+When the deadline passes on a run still `in_progress`, Origin completes the run itself with a `timed_out` conclusion and delivers `repository.check_run.completed`. Expiry runs as a periodic sweep rather than on a per-run timer, so a run can sit past its deadline briefly before Origin closes it. A `queued` run never expires, and neither does a run that carries no `deadlineAt`. Completing the run yourself before the deadline clears it. Origin leaves the run's `externalUpdatedAt` untouched when it times a run out, so a later completion from your provider can still overwrite the `timed_out` conclusion.
 
 #### Path Parameters
 
@@ -4907,6 +4967,101 @@ curl --request GET \
 }
 ```
 
+### List Comparison Files
+
+/v1/origin/repos///compare//files
+
+Lists the files changed by a comparison: the diff of `head` against the merge base of `base` and `head`.
+
+`basehead` is `"{base}...{head}"`; refs containing "/" must use their SHA. The file list always agrees with the summary from [Compare Commits](https://cursor.com/docs/api/origin/llms-full.txt#compare-commits), so an `identical` or `behind` comparison returns an empty list, and unrelated histories return `404`. Results default to 30 files and are capped at 100. Each file carries the same fields as [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files).
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`basehead` string Required
+
+`"{base}...{head}"`, where either revision may be a SHA, branch, tag, or symbolic ref such as `HEAD`.
+
+#### Query Parameters
+
+`pageSize` integer
+
+Max changed files to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
+
+`pageToken` string
+
+Opaque cursor from a previous response's `next_page_token`. Empty for the first page. The token is bound to the resolved comparison, page size, and file cursor, so `basehead` and `page_size` on a follow-up request must match the token. Origin re-resolves the comparison on every page; when its commits have moved since the token was issued, the request returns `InvalidArgument` (HTTP 400) and listing must restart from the first page.
+
+#### Response Fields
+
+`files` array
+
+Paginated changed files with filename, status, line counts, patch, and previousFilename for renamed or copied files. Binary patches are empty.
+
+`files[].filename` string
+
+Path of the changed file.
+
+`files[].status` string
+
+Change status; added, removed, modified, renamed, or copied.
+
+`files[].additions` integer
+
+Added line count for the file.
+
+`files[].deletions` integer
+
+Deleted line count for the file.
+
+`files[].changes` integer
+
+Total changed line count for the file.
+
+`files[].patch` string
+
+Unified patch; empty for binary files.
+
+`files[].previousFilename` string
+
+Previous path when the file was renamed or copied.
+
+`nextPageToken` string
+
+Opaque cursor for the next page; empty when there are no more files.
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/compare/BASE...HEAD/files' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "files": [
+    {
+      "filename": "string",
+      "status": "string",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "string",
+      "previousFilename": "string"
+    }
+  ],
+  "nextPageToken": "string"
+}
+```
+
 ### Get Contents
 
 /v1/origin/repos///contents
@@ -5979,7 +6134,7 @@ Closed or merged pull requests may additionally include `closedAt`, `mergedAt`, 
 
 Review `verdict` is `approve`, `request_changes`, or `comment`. `submittedAt` is absent for an unsubmitted draft review. `dismissal` is absent while the verdict remains active. Dismissed reviews remain visible in review listings. Reviews automatically superseded by a newer decision carry a server-generated message.
 
-Comments expose a `thread` reference for grouping. Create-comment requests still accept the scalar `threadId` command parameter when replying. First-class thread resources and resolution APIs are not part of this release.
+Comments expose a `thread` reference for grouping. Create-comment requests still accept the scalar `threadId` command parameter when replying. Resolve or reopen a thread with [Update Pull Request Thread](https://cursor.com/docs/api/origin/llms-full.txt#update-pull-request-thread).
 
 ### List Pull Requests
 
@@ -6516,6 +6671,8 @@ Optional `parent_pull_number` stacks this change on another open or draft pull r
 
 A `title` longer than 256 characters, or a `body` longer than 65,536 characters, returns `InvalidArgument` (HTTP 400). Both limits count Unicode code points.
 
+A `head` with no history in common with `base` returns `InvalidArgument` (HTTP 400) and creates nothing. If a later push leaves an open pull request's head disjoint from its base, Origin closes the pull request and delivers [`pull_request.closed`](https://cursor.com/docs/api/origin/llms-full.txt#events); a subsequent related push does not reopen it.
+
 #### Path Parameters
 
 `ownerSlug` string Required
@@ -7046,7 +7203,7 @@ curl --request PATCH \
 
 /v1/origin/repos///pulls//comments
 
-Lists every comment on a pull request in chronological order. Each comment includes its thread id so clients can group the flat response into threads.
+Lists every comment on a pull request in chronological order. Each comment carries its full thread: id, diff anchor, and resolution state. Group the flat response by `thread.id` without a second request.
 
 #### Path Parameters
 
@@ -7082,11 +7239,59 @@ Stable pull request comment identifier.
 
 `comments[].thread` object
 
-Thread reference used to group related comments.
+The thread this comment belongs to, including its diff anchor and resolution state.
 
 `comments[].thread.id` string
 
-Identifier used to group comments in one pull request discussion thread.
+Stable identity of the thread. Group comments in one discussion by this value.
+
+`comments[].thread.version` object
+
+Pull request version the thread was filed against, including its head and base SHAs. The anchor is fixed to this version and does not move as the pull request gains versions.
+
+`comments[].thread.version.number` string
+
+Monotonic pull request version number encoded as a JSON string.
+
+`comments[].thread.version.headSha` string
+
+Head SHA captured by this pull request version.
+
+`comments[].thread.version.baseSha` string
+
+Base SHA captured by this pull request version.
+
+`comments[].thread.version.createdAt` string
+
+RFC 3339 timestamp for creation of this pull request version.
+
+`comments[].thread.path` string
+
+File path of the thread's diff anchor. Empty for general-discussion threads.
+
+`comments[].thread.side` string
+
+Diff side of the anchor. Allowed values: `left`, `right`. Unset for general-discussion threads.
+
+`comments[].thread.startLine` integer
+
+First line of the anchored range in the `side` version of the file. `0` for file-level and general-discussion threads.
+
+`comments[].thread.endLine` integer
+
+Inclusive last line of the anchored range. `0` when the anchor is a single line or has no line range.
+
+`comments[].thread.resolvedAt` string
+
+RFC 3339 timestamp for when the thread was resolved. Unset while the thread is open.
+
+`comments[].thread.createdAt` string
+
+RFC 3339 thread creation timestamp.
+
+`comments[].thread.updatedAt` string
+
+RFC 3339 timestamp for the latest thread update.
 
 `comments[].body` string
 
@@ -7194,7 +7399,20 @@ curl --request GET \
     {
       "id": "string",
       "thread": {
-        "id": "string"
+        "id": "string",
+        "version": {
+          "number": "string",
+          "headSha": "string",
+          "baseSha": "string",
+          "createdAt": "2026-01-01T00:00:00Z"
+        },
+        "path": "string",
+        "side": "left",
+        "startLine": 0,
+        "endLine": 0,
+        "resolvedAt": "2026-01-01T00:00:00Z",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-01T00:00:00Z"
       },
       "body": "string",
       "author": {
@@ -7250,11 +7468,59 @@ Stable pull request comment identifier.
 
 `thread` object
 
-Thread reference used to group related comments.
+The thread this comment belongs to, including its diff anchor and resolution state.
 
 `thread.id` string
 
-Identifier used to group comments in one pull request discussion thread.
+Stable identity of the thread. Group comments in one discussion by this value.
+
+`thread.version` object
+
+Pull request version the thread was filed against, including its head and base SHAs. The anchor is fixed to this version and does not move as the pull request gains versions.
+
+`thread.version.number` string
+
+Monotonic pull request version number encoded as a JSON string.
+
+`thread.version.headSha` string
+
+Head SHA captured by this pull request version.
+
+`thread.version.baseSha` string
+
+Base SHA captured by this pull request version.
+
+`thread.version.createdAt` string
+
+RFC 3339 timestamp for creation of this pull request version.
+
+`thread.path` string
+
+File path of the thread's diff anchor. Empty for general-discussion threads.
+
+`thread.side` string
+
+Diff side of the anchor. Allowed values: `left`, `right`. Unset for general-discussion threads.
+
+`thread.startLine` integer
+
+First line of the anchored range in the `side` version of the file. `0` for file-level and general-discussion threads.
+
+`thread.endLine` integer
+
+Inclusive last line of the anchored range. `0` when the anchor is a single line or has no line range.
+
+`thread.resolvedAt` string
+
+RFC 3339 timestamp for when the thread was resolved. Unset while the thread is open.
+
+`thread.createdAt` string
+
+RFC 3339 thread creation timestamp.
+
+`thread.updatedAt` string
+
+RFC 3339 timestamp for the latest thread update.
 
 `body` string
 
@@ -7316,7 +7582,20 @@ curl --request GET \
 {
   "id": "string",
   "thread": {
-    "id": "string"
+    "id": "string",
+    "version": {
+      "number": "string",
+      "headSha": "string",
+      "baseSha": "string",
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    "path": "string",
+    "side": "left",
+    "startLine": 0,
+    "endLine": 0,
+    "resolvedAt": "2026-01-01T00:00:00Z",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
   },
   "body": "string",
   "author": {
@@ -7334,7 +7613,9 @@ curl --request GET \
 
 /v1/origin/repos///pulls//comments
 
-Creates a general-discussion comment or reply on an Origin pull request. Omitting `thread_id` starts a new thread; providing it replies to that thread. These are general-discussion comments, not diff-anchored review comments. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
+Creates a comment on an Origin pull request. The comment targets exactly one of three things: `threadId` replies to an existing thread, general-discussion and inline alike; `inline` opens a new thread anchored to the pull request version's diff; supplying neither opens a new general-discussion thread. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
+
+An `inline` anchor must reference the version's diff. The `path` must be part of that diff, and the `side` must have content there, so anchoring `left` on an added file or `right` on a deleted file is rejected with `InvalidArgument` (HTTP 400). Any line of a changed file anchors; the range is not restricted to the diff's hunks. Origin never falls back to a general-discussion comment when an anchor is invalid.
 
 #### Path Parameters
 
@@ -7356,7 +7637,31 @@ Comment text. Maximum length: 65,536 characters, counted as Unicode code points.
 
 `threadId` string
 
-Existing thread id to reply to. Omit to create a new general-discussion thread.
+Existing thread id to reply to. Omit to open a new thread. Cannot be combined with `versionNumber`.
+
+`inline` object
+
+Diff anchor for a new inline thread. Cannot be combined with `threadId`.
+
+`inline.path` string Required
+
+File path in the pull request version's diff.
+
+`inline.side` string Required
+
+Diff side of the anchor. Allowed values: `left` for the base version of the file, `right` for the head version.
+
+`inline.startLine` integer Required
+
+First 1-based line of the anchored range in the `side` version of the file.
+
+`inline.endLine` integer
+
+Inclusive last line of the anchored range. Must be greater than or equal to `startLine`. Omit for a single-line anchor.
+
+`versionNumber` string
+
+Pull request version number to file a new thread against. `0` or unset means the latest version at call time. Only meaningful for new threads.
 
 #### Response Fields
 
@@ -7366,11 +7671,59 @@ Stable pull request comment identifier.
 
 `thread` object
 
-Thread reference used to group related comments.
+The thread this comment belongs to. A reply carries the thread id only, and a new general-discussion thread carries the id and timestamps; a new inline thread carries the full anchor. Read [Get Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-comment) or [List Pull Request Comments](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-comments) for complete thread state.
 
 `thread.id` string
 
-Identifier used to group comments in one pull request discussion thread.
+Stable identity of the thread. Group comments in one discussion by this value.
+
+`thread.version` object
+
+Pull request version the thread was filed against, including its head and base SHAs. The anchor is fixed to this version and does not move as the pull request gains versions.
+
+`thread.version.number` string
+
+Monotonic pull request version number encoded as a JSON string.
+
+`thread.version.headSha` string
+
+Head SHA captured by this pull request version.
+
+`thread.version.baseSha` string
+
+Base SHA captured by this pull request version.
+
+`thread.version.createdAt` string
+
+RFC 3339 timestamp for creation of this pull request version.
+
+`thread.path` string
+
+File path of the thread's diff anchor. Empty for general-discussion threads.
+
+`thread.side` string
+
+Diff side of the anchor. Allowed values: `left`, `right`. Unset for general-discussion threads.
+
+`thread.startLine` integer
+
+First line of the anchored range in the `side` version of the file. `0` for file-level and general-discussion threads.
+
+`thread.endLine` integer
+
+Inclusive last line of the anchored range. `0` when the anchor is a single line or has no line range.
+
+`thread.resolvedAt` string
+
+RFC 3339 timestamp for when the thread was resolved. Unset while the thread is open.
+
+`thread.createdAt` string
+
+RFC 3339 thread creation timestamp.
+
+`thread.updatedAt` string
+
+RFC 3339 timestamp for the latest thread update.
 
 `body` string
 
@@ -7426,7 +7779,14 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "body": "BODY"
+  "body": "BODY",
+  "inline": {
+    "path": "FILE_PATH",
+    "side": "right",
+    "startLine": 42,
+    "endLine": 45
+  },
+  "versionNumber": "VERSION_NUMBER"
 }'
 ```
 
@@ -7436,7 +7796,20 @@ curl --request POST \
 {
   "id": "string",
   "thread": {
-    "id": "string"
+    "id": "string",
+    "version": {
+      "number": "string",
+      "headSha": "string",
+      "baseSha": "string",
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    "path": "string",
+    "side": "left",
+    "startLine": 0,
+    "endLine": 0,
+    "resolvedAt": "2026-01-01T00:00:00Z",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
   },
   "body": "string",
   "author": {
@@ -7484,11 +7857,59 @@ Stable pull request comment identifier.
 
 `thread` object
 
-Thread reference used to group related comments.
+The thread this comment belongs to, including its diff anchor and resolution state.
 
 `thread.id` string
 
-Identifier used to group comments in one pull request discussion thread.
+Stable identity of the thread. Group comments in one discussion by this value.
+
+`thread.version` object
+
+Pull request version the thread was filed against, including its head and base SHAs. The anchor is fixed to this version and does not move as the pull request gains versions.
+
+`thread.version.number` string
+
+Monotonic pull request version number encoded as a JSON string.
+
+`thread.version.headSha` string
+
+Head SHA captured by this pull request version.
+
+`thread.version.baseSha` string
+
+Base SHA captured by this pull request version.
+
+`thread.version.createdAt` string
+
+RFC 3339 timestamp for creation of this pull request version.
+
+`thread.path` string
+
+File path of the thread's diff anchor. Empty for general-discussion threads.
+
+`thread.side` string
+
+Diff side of the anchor. Allowed values: `left`, `right`. Unset for general-discussion threads.
+
+`thread.startLine` integer
+
+First line of the anchored range in the `side` version of the file. `0` for file-level and general-discussion threads.
+
+`thread.endLine` integer
+
+Inclusive last line of the anchored range. `0` when the anchor is a single line or has no line range.
+
+`thread.resolvedAt` string
+
+RFC 3339 timestamp for when the thread was resolved. Unset while the thread is open.
+
+`thread.createdAt` string
+
+RFC 3339 thread creation timestamp.
+
+`thread.updatedAt` string
+
+RFC 3339 timestamp for the latest thread update.
 
 `body` string
 
@@ -7554,7 +7975,20 @@ curl --request PATCH \
 {
   "id": "string",
   "thread": {
-    "id": "string"
+    "id": "string",
+    "version": {
+      "number": "string",
+      "headSha": "string",
+      "baseSha": "string",
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    "path": "string",
+    "side": "left",
+    "startLine": 0,
+    "endLine": 0,
+    "resolvedAt": "2026-01-01T00:00:00Z",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
   },
   "body": "string",
   "author": {
@@ -7563,6 +7997,119 @@ curl --request PATCH \
       "email": "string"
     }
   },
+  "createdAt": "2026-01-01T00:00:00Z",
+  "updatedAt": "2026-01-01T00:00:00Z"
+}
+```
+
+### Update Pull Request Thread
+
+/v1/origin/repos///pulls/threads/
+
+Resolves or reopens a pull request comment thread and returns the thread's updated state. Resolving an already-resolved thread, or reopening an already-open one, is a no-op.
+
+The thread must belong to the repository in the path; a thread stored on another repository returns `404`. Replying to a resolved thread with [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment) is allowed and does not reopen it.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`threadId` string Required
+
+Stable Origin thread ID.
+
+#### Request Body
+
+`resolved` boolean Required
+
+Target resolution state. `true` resolves the thread; `false` reopens it.
+
+#### Response Fields
+
+`id` string
+
+Stable identity of the thread. Group comments in one discussion by this value.
+
+`version` object
+
+Pull request version the thread was filed against, including its head and base SHAs. The anchor is fixed to this version and does not move as the pull request gains versions.
+
+`version.number` string
+
+Monotonic pull request version number encoded as a JSON string.
+
+`version.headSha` string
+
+Head SHA captured by this pull request version.
+
+`version.baseSha` string
+
+Base SHA captured by this pull request version.
+
+`version.createdAt` string
+
+RFC 3339 timestamp for creation of this pull request version.
+
+`path` string
+
+File path of the thread's diff anchor. Empty for general-discussion threads.
+
+`side` string
+
+Diff side of the anchor. Allowed values: `left`, `right`. Unset for general-discussion threads.
+
+`startLine` integer
+
+First line of the anchored range in the `side` version of the file. `0` for file-level and general-discussion threads.
+
+`endLine` integer
+
+Inclusive last line of the anchored range. `0` when the anchor is a single line or has no line range.
+
+`resolvedAt` string
+
+RFC 3339 timestamp for when the thread was resolved. Unset while the thread is open.
+
+`createdAt` string
+
+RFC 3339 thread creation timestamp.
+
+`updatedAt` string
+
+RFC 3339 timestamp for the latest thread update.
+
+```bash
+curl --request PATCH \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/pulls/threads/THREAD_ID' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "resolved": true
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "id": "string",
+  "version": {
+    "number": "string",
+    "headSha": "string",
+    "baseSha": "string",
+    "createdAt": "2026-01-01T00:00:00Z"
+  },
+  "path": "string",
+  "side": "left",
+  "startLine": 0,
+  "endLine": 0,
+  "resolvedAt": "2026-01-01T00:00:00Z",
   "createdAt": "2026-01-01T00:00:00Z",
   "updatedAt": "2026-01-01T00:00:00Z"
 }
@@ -8337,6 +8884,212 @@ curl --request POST \
 }
 ```
 
+### List Pull Request Requested Reviewers
+
+/v1/origin/repos///pulls//requested\_reviewers
+
+Lists the users and groups whose review is currently requested on a pull request.
+
+A direct request clears when that user submits a review, and a group request clears when any current member of the group submits. Unsubmitted draft reviews leave the request pending, and requesting review again after a submission returns the reviewer to this list. Groups without a readable public identifier are omitted. Reviewers are identified by id; these responses carry no email addresses.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`pullNumber` string Required
+
+Repository-local pull request number.
+
+#### Response Fields
+
+`users` array
+
+Users whose review is requested. Empty when none are pending.
+
+`users[].id` string
+
+Encoded user identifier (`user_…`), the same format the organization API uses.
+
+`groups` array
+
+Groups whose review is requested. Empty when none are pending.
+
+`groups[].id` string
+
+Group public identifier (`grp_…`).
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/pulls/PULL_NUMBER/requested_reviewers' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "users": [
+    {
+      "id": "string"
+    }
+  ],
+  "groups": [
+    {
+      "id": "string"
+    }
+  ]
+}
+```
+
+### Request Pull Request Reviewers
+
+/v1/origin/repos///pulls//requested\_reviewers
+
+Requests reviews from the given users and groups on a pull request, and returns the reviewers this call requested.
+
+Identifiers resolve against the repository's reviewer candidates by public id, user email, or group slug. Display names do not resolve. An unknown or ambiguous identifier returns `InvalidArgument` (HTTP 400) naming the identifier, and at least one non-empty entry is required across `users` and `groups`.
+
+Requesting an already-requested reviewer bumps the request timestamp, so a reviewer who had submitted a review reappears as pending. A reviewer who is not a candidate for the repository returns `PermissionDenied` (HTTP 403).
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`pullNumber` string Required
+
+Repository-local pull request number.
+
+#### Request Body
+
+`users` array
+
+User identifiers to request. Each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
+
+`groups` array
+
+Group identifiers to request. Each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+
+#### Response Fields
+
+`users` array
+
+Users this call requested.
+
+`users[].id` string
+
+Encoded user identifier (`user_…`), the same format the organization API uses.
+
+`groups` array
+
+Groups this call requested.
+
+`groups[].id` string
+
+Group public identifier (`grp_…`).
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/pulls/PULL_NUMBER/requested_reviewers' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "users": [
+    "USER_ID"
+  ],
+  "groups": [
+    "GROUP_ID"
+  ]
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "users": [
+    {
+      "id": "string"
+    }
+  ],
+  "groups": [
+    {
+      "id": "string"
+    }
+  ]
+}
+```
+
+### Remove Pull Request Requested Reviewers
+
+/v1/origin/repos///pulls//requested\_reviewers
+
+Removes requested reviews from the given users and groups on a pull request. The response body is empty.
+
+Identifiers resolve against the repository's reviewer candidates by public id, user email, or group slug. Display names do not resolve. An unknown or ambiguous identifier returns `InvalidArgument` (HTTP 400) naming the identifier, and at least one non-empty entry is required across `users` and `groups`.
+
+Removing a user or group that is not currently requested is a no-op. An identifier that is no longer a reviewer candidate is still accepted when it is a stable public id (`user_…` or `grp_…`), so a reviewer who left the repository can be cleared.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`pullNumber` string Required
+
+Repository-local pull request number.
+
+#### Request Body
+
+`users` array
+
+User identifiers to remove. Each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
+
+`groups` array
+
+Group identifiers to remove. Each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+
+#### Response Fields
+
+Successful requests return no response body.
+
+```bash
+curl --request DELETE \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/pulls/PULL_NUMBER/requested_reviewers' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "users": [
+    "USER_ID"
+  ],
+  "groups": [
+    "GROUP_ID"
+  ]
+}'
+```
+
+**Response:**
+
+```text
+204 No Content
+```
+
 ### List Pull Request Reviews
 
 /v1/origin/repos///pulls//reviews
@@ -8596,9 +9349,13 @@ curl --request GET \
 
 /v1/origin/repos///pulls//reviews
 
-Creates and submits a review on a pull request.
+Creates and submits a review on a pull request, optionally together with its line-anchored comments in one atomic request.
 
 The review is submitted immediately. A new `approve` or `request_changes` review supersedes the caller's prior live decision review on the same pull request, which is dismissed. Pull request authors cannot `approve` their own pull request. Fails with FAILED\_PRECONDITION while the caller has an unsubmitted draft review on the pull request.
+
+When `comments` is set, every anchor is validated against the reviewed version's diff before anything is written, using the same in-diff check as [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment). If one comment fails, the whole request fails with `InvalidArgument` (HTTP 400) and nothing is published. Comments become visible atomically with the review: no comment or event is observable until the review submits, and then each comment emits its own [pull\_request.comment.created](https://cursor.com/docs/api/origin/llms-full.txt#events) webhook alongside the review's event.
+
+The operation carries no idempotency key, so a retry after an ambiguous transport failure can create a second review. Call [List Pull Request Reviews](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-reviews) before retrying.
 
 #### Path Parameters
 
@@ -8624,7 +9381,39 @@ Free-text review summary. May be empty.
 
 `versionNumber` string
 
-Pull request version number the review applies to (see `PullRequestVersion.number`). Omit to review the latest version at call time.
+Pull request version number the review applies to (see `PullRequestVersion.number`). Omit to review the latest version at call time. Comments anchor against this same version.
+
+`comments` array
+
+Comments published atomically with the review. Maximum 50 per request.
+
+`comments[].body` string Required
+
+Comment text. Must contain a non-whitespace character.
+
+`comments[].inline` object
+
+Diff anchor for a new inline thread on the reviewed version's diff. Same shape and validation as `inline` on [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment). Cannot be combined with `comments[].threadId`.
+
+`comments[].inline.path` string Required
+
+File path in the reviewed version's diff.
+
+`comments[].inline.side` string Required
+
+Diff side of the anchor. Allowed values: `left` for the base version of the file, `right` for the head version.
+
+`comments[].inline.startLine` integer Required
+
+First 1-based line of the anchored range in the `side` version of the file.
+
+`comments[].inline.endLine` integer
+
+Inclusive last line of the anchored range. Must be greater than or equal to `startLine`. Omit for a single-line anchor.
+
+`comments[].threadId` string
+
+Existing thread id on this pull request to reply to. The reply stays hidden until the review publishes. Omit both `comments[].inline` and this field to open a new general-discussion thread.
 
 #### Response Fields
 
@@ -8754,7 +9543,24 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "verdict": "approve"
+  "verdict": "request_changes",
+  "body": "REVIEW_BODY",
+  "versionNumber": "VERSION_NUMBER",
+  "comments": [
+    {
+      "body": "BODY",
+      "inline": {
+        "path": "FILE_PATH",
+        "side": "right",
+        "startLine": 42,
+        "endLine": 45
+      }
+    },
+    {
+      "body": "BODY",
+      "threadId": "THREAD_ID"
+    }
+  ]
 }'
 ```
 

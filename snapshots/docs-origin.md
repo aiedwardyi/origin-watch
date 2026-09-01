@@ -50,7 +50,7 @@ After Origin is enabled, [cursor.com/codebase](https://cursor.com/codebase) show
 - Create a repo with **New**, or bring one over with **Sync from GitHub**
 - Open a repo to browse code, pull requests, and settings
 
-Repo icons show how each repo is hosted: Origin-hosted repos, and repos synced from GitHub.
+Repo icons show how each repo is hosted: Origin-hosted repos, and repos synced from GitHub. For Origin-hosted repos, Origin is the source of truth. For [synced repos](https://cursor.com/docs/origin/mirror-github.md), GitHub stays the source of truth and Origin is the mirror.
 
 ## Next steps
 
