@@ -105,7 +105,7 @@ Manage the SSH public keys on your Origin account:
 
 ## API requests
 
-`origin api` makes an authenticated request to the Origin REST API at `api.cursor.com/v1/origin` for anything without a first-class command. It supports request flags similar to `gh api`: `-X, --method`, `-H, --header`, `-F, --field`, `-f, --raw-field`, `--input`, and `-q, --jq`. `{owner}`, `{repo}`, and `{branch}` placeholders expand from `-R, --repo`, the `ORIGIN_REPO` environment variable, or the `origin` git remote. See the [Origin API](https://cursor.com/docs/api/origin.md) docs for endpoints, authentication, and examples.
+`origin api` makes an authenticated request to the Origin REST API at `api.cursor.com/v1/origin` for anything without a first-class command. It supports request flags similar to `gh api`: `-X, --method`, `-H, --header`, `-F, --field`, `-f, --raw-field`, `--input`, and `-q, --jq`. `{owner}`, `{repo}`, and `{branch}` placeholders expand from `-R, --repo`, the `ORIGIN_REPO` environment variable, or the `origin` git remote. See the [Origin API](https://cursor.com/docs/api/origin/llms-full.txt) docs for endpoints, authentication, and examples.
 
 ## Updates
 

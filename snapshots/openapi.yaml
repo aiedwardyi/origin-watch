@@ -3305,7 +3305,7 @@ paths:
                  A trailing slash on `ref` is preserved (`heads/` → `refs/heads/`).
                  The symbolic `HEAD` is matched exactly (it is not under `refs/`).
                  Empty repositories return 409 Conflict.
-            operationId: OriginService_ListMatchingGitRefs
+            operationId: OriginService_ListMatchingGitRefs_2
             parameters:
                 - name: ownerSlug
                   in: path
@@ -7757,7 +7757,7 @@ paths:
                  respond 302 with a short-lived signed download URL in `Location`.
                  Archive entries are at the root of the tar (no wrapping directory).
                  Empty repositories return 409 Conflict.
-            operationId: OriginService_GetRepoTarball
+            operationId: OriginService_GetRepoTarball_2
             parameters:
                 - name: ownerSlug
                   in: path
@@ -10946,6 +10946,26 @@ components:
                 repository:
                     $ref: '#/components/schemas/Repo'
             description: Payload for a repository.created webhook.
+        RepositoryDeletedWebhookPayload:
+            type: object
+            properties:
+                repository:
+                    allOf:
+                        - $ref: '#/components/schemas/RepositoryReference'
+                    description: |-
+                        The repository that was deleted. A reference only: the repository no
+                         longer resolves through the API once deleted.
+                deletedAt:
+                    type: string
+                    description: When the repository was deleted.
+                    format: date-time
+            description: Payload for a repository.deleted webhook.
+        RepositoryMetadataUpdatedWebhookPayload:
+            type: object
+            properties:
+                repository:
+                    $ref: '#/components/schemas/Repo'
+            description: Payload for a repository.metadata.updated webhook.
         RepositoryMirror:
             type: object
             properties:

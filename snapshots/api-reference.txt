@@ -29,6 +29,8 @@ Endpoint paths in the [reference](https://cursor.com/docs/api/origin/llms-full.t
 
 Requests and responses use `application/json`. JSON field names are **camelCase**. Timestamps are RFC 3339 strings. Protobuf 64-bit integers, including pull request numbers and version numbers, are encoded as JSON strings.
 
+Responses carry fields that sit at their default value rather than dropping them, so a `false` boolean, a `0` number, an empty string, and an empty array are all present in the body. Read the value itself instead of treating a missing key as the default. Fields documented as absent or omitted are optional in the contract and stay out of the body when they are unset.
+
 ## Getting started
 
 ### Origin access
@@ -70,14 +72,14 @@ https://cursor.com/codebase/apps/install
   &include_granted_scopes=true
 ```
 
-| Parameter                | Required                           | Description                                                                                                                                                                                                       |
-| ------------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client_id`              | Yes                                | Origin App ID.                                                                                                                                                                                                    |
-| `scope`                  | Yes                                | Space-separated scopes. `repository:metadata:read` is added automatically.                                                                                                                                        |
-| `redirect_uri`           | Yes for partner-initiated installs | Exact registered callback URI.                                                                                                                                                                                    |
+| Parameter                | Required                           | Description                                                                                                                                                                                                                  |
+| ------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client_id`              | Yes                                | Origin App ID.                                                                                                                                                                                                               |
+| `scope`                  | Yes                                | Space-separated scopes. `repository:metadata:read` is added automatically.                                                                                                                                                   |
+| `redirect_uri`           | Yes for partner-initiated installs | Exact registered callback URI.                                                                                                                                                                                               |
 | `state`                  | Strongly recommended               | Random anti-forgery value echoed as the `state` claim of the [installation receipt](https://cursor.com/docs/api/origin/llms-full.txt#installation-receipt). Generate it before redirecting and verify the claim on callback. |
-| `summary`                | No                                 | Short explanation displayed during consent.                                                                                                                                                                       |
-| `include_granted_scopes` | No                                 | When `true`, retain existing grants and request only additions.                                                                                                                                                   |
+| `summary`                | No                                 | Short explanation displayed during consent.                                                                                                                                                                                  |
+| `include_granted_scopes` | No                                 | When `true`, retain existing grants and request only additions.                                                                                                                                                              |
 
 The workspace admin chooses the target owner, approved scopes, and either all repositories or selected repositories. The customer, not the app, controls repository access.
 
@@ -344,12 +346,12 @@ The Origin API uses a shared per-principal point budget that resets on a rolling
 
 Every endpoint charges a fixed cost against that budget before the handler runs. Authentication and authorization failures are not charged.
 
-| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                           |
-| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                    |
+| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                       |
+| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                |
 | 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), and [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) |
-| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                                                                                                     |
+| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                                                                                                                                      |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -505,7 +507,10 @@ Each request wraps the event payload with delivery, app, and installation identi
 
 | Event                               | Delivered when                                                                                                                               |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository.created`                | A repository is created.                                                                                                                     |
+| `repository.deleted`                | A repository is deleted.                                                                                                                     |
 | `repository.pushed`                 | One or more refs change in a push.                                                                                                           |
+| `repository.metadata.updated`       | A repository's default branch changes.                                                                                                       |
 | `pull_request.created`              | A pull request opens.                                                                                                                        |
 | `pull_request.head_ref.pushed`      | The pull request head advances.                                                                                                              |
 | `pull_request.base_ref.updated`     | The base ref or resolved base commit changes.                                                                                                |
@@ -523,23 +528,24 @@ Each request wraps the event payload with delivery, app, and installation identi
 | `repository.check_run.created`      | A check run is created.                                                                                                                      |
 | `repository.check_run.completed`    | A check run completes.                                                                                                                       |
 | `installation.created`              | The app is installed.                                                                                                                        |
-| `installation.updated`              | Scopes or repository selection change.                                                                                                       |
+| `installation.updated`              | Scopes, repository selection, or the owner namespace slug change.                                                                            |
 | `installation.suspended`            | The installation is suspended.                                                                                                               |
 | `installation.unsuspended`          | A suspended installation is restored.                                                                                                        |
 | `installation.deleted`              | The app is uninstalled.                                                                                                                      |
 
 The five `installation.*` events go to the app itself rather than to a repository subscription. Origin always sends them, so they do not appear in the app's selectable event list. Every other event in this table is a repository-scoped subscription.
 
-Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories and to outbound mirrors are delivered as usual, and the mirror state does not affect any other event.
+Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories and to outbound mirrors are delivered as usual, and the mirror state does not affect any other event. `repository.deleted` is delivered for a repository mirrored from GitHub: stopping the sync deletes the Cursor-side repository only, and GitHub sends nothing for it.
 
 ### Payload families
 
 - Pull request lifecycle events contain a `pullRequest` snapshot and `repository` reference. Route on `event.type`; there is no separate action field. The snapshot omits the pull request's assigned `labels`; read them from [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) or [List Pull Requests](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-requests).
 - Comment events contain a `pullRequest` reference and the affected `comment`. A comment that opened its thread carries the thread's anchor inline: `comment.thread` holds the filed-against `version`, `path`, `side`, `startLine`, and `endLine`, so a receiver can materialize the thread without a follow-up read. A reply carries `comment.thread.id` only. Resolution state is not part of the event; read it from [Get Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-comment) or [List Pull Request Comments](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-comments). Comments filed with a review stay silent until the review submits, and then each one emits its own event.
 - Review events contain a `pullRequest` reference and the affected `review`. Both `pull_request.review.submitted` and `pull_request.review.dismissed` use this shape; on a dismissal the review carries `review.dismissal` with the dismissing actor, timestamp, and message. A review superseded by a newer decision carries a server-generated message.
-- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user.id` is the encoded user ID (`user_…`, the same format as the organization API), and `reviewer.group.id` is the group public ID (`grp_…`). Read the current pending set with [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers), and change it with [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers) or [Remove Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#remove-pull-request-requested-reviewers).
+- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user` carries the encoded user ID (`user_…`, the same format as the organization API) and the account `email`, and `reviewer.group.id` is the group public ID (`grp_…`). Read the current pending set with [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers), and change it with [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers) or [Remove Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#remove-pull-request-requested-reviewers).
 - Check events contain `repository`, `checkSuite`, `checkRun`, and `actor`.
 - Push events contain one repository snapshot and up to 100 `refUpdates`. `refUpdatesCount` is authoritative. Optional tip metadata is best effort and does not provide a complete commits array. Merging a pull request advances the base ref, and that update is delivered as a push event; because Origin itself performs the merge push, the event names no pusher.
+- Repository events split by shape. `repository.created` and `repository.metadata.updated` carry a full `repository` snapshot with no delta and no updating actor, so compare successive snapshots or refetch the repository to see what moved. `repository.deleted` carries a `repository` reference and `deletedAt` instead of a snapshot, because a deleted repository no longer resolves through the API.
 - Installation events contain the installation snapshot and app identity. The snapshot carries `installedBy`, the user who originally installed the app, on all five `installation.*` events. Selected repository arrays may be capped at 5,000; `repositoriesCount` is authoritative.
 
 ### Recovery
@@ -625,7 +631,7 @@ Resource snapshots contain the resource's current fields. Container context uses
 
 ## Endpoint reference
 
-Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and each operation lists the response codes that operation can return, plus a request and response example. Every operation also carries an `x-origin-scopes` extension: `scopes` holds the scope the operation requires, and `tokenTypes` holds the credential kinds it accepts. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`.
+Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and each operation lists the response codes that operation can return, plus a request and response example. Every operation also carries an `x-origin-scopes` extension: `scopes` holds the scope the operation requires, and `tokenTypes` holds the credential kinds it accepts. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`. Every operation carries a unique `operationId`; where one operation answers two URL shapes, the second shape's id takes a `_2` suffix, as in `OriginService_GetRepoTarball_2`.
 
 The JSON snippets show schema-shaped placeholder values. Response field descriptions reflect the OpenAPI schema and current platform contract.
 
@@ -634,6 +640,8 @@ The JSON snippets show schema-shaped placeholder values. Response field descript
 ### Get Rate Limit
 
 /v1/origin/rate\_limit
+
+Requires no scope (app JWT or installation access token or user credential).
 
 Returns the authenticated principal's current public API rate limit status.
 
@@ -681,17 +689,17 @@ curl --request GET \
 {
   "resources": {
     "core": {
-      "limit": 0,
-      "remaining": 0,
-      "reset": 0,
-      "used": 0
+      "limit": 6000,
+      "remaining": 5994,
+      "reset": 1785682800,
+      "used": 6
     }
   },
   "rate": {
-    "limit": 0,
-    "remaining": 0,
-    "reset": 0,
-    "used": 0
+    "limit": 6000,
+    "remaining": 5994,
+    "reset": 1785682800,
+    "used": 6
   }
 }
 ```
@@ -699,6 +707,8 @@ curl --request GET \
 ### Get Authenticated App
 
 /v1/origin/app
+
+Requires scope `app:metadata:read` (app JWT).
 
 Returns metadata for the authenticated app.
 
@@ -746,17 +756,18 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "slug": "string",
-  "displayName": "string",
-  "webhookUrl": "string",
+  "id": "app_01k2ja2000e0080000000000a1",
+  "slug": "ci-status-bot",
+  "displayName": "CI Status Bot",
+  "webhookUrl": "https://ci.acme.dev/webhooks/origin",
   "events": [
-    "string"
+    "pull_request.created",
+    "pull_request.merged"
   ],
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
   "installationRedirectUris": [
-    "string"
+    "https://ci.acme.dev/origin/setup"
   ]
 }
 ```
@@ -764,6 +775,8 @@ curl --request GET \
 ### List App Installations
 
 /v1/origin/app/installations
+
+Requires scope `app:metadata:read` (app JWT).
 
 Lists installations for the authenticated app.
 
@@ -851,32 +864,30 @@ curl --request GET \
 {
   "installations": [
     {
-      "id": "string",
-      "appId": "string",
+      "id": "inst_01k2ja2000e0080000000000b2",
+      "appId": "app_01k2ja2000e0080000000000a1",
       "target": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       },
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "repoSelectionMode": "all",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "repoSelectionMode": "selected",
       "scopes": [
-        "string"
-      ],
-      "installedBy": {
-        "id": "string",
-        "email": "string"
-      }
+        "repository:contents:read",
+        "repository:pull_requests:read"
+      ]
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get App Installation
 
 /v1/origin/app/installations/
+
+Requires scope `app:metadata:read` (app JWT).
 
 Returns a single installation for the authenticated app.
 
@@ -952,29 +963,28 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "appId": "string",
+  "id": "inst_01k2ja2000e0080000000000b2",
+  "appId": "app_01k2ja2000e0080000000000a1",
   "target": {
-    "slug": "string",
-    "id": "string",
+    "slug": "acme",
+    "id": "ns_01k2ja2000e0080000000000p3",
     "type": "team"
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "repoSelectionMode": "all",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "repoSelectionMode": "selected",
   "scopes": [
-    "string"
-  ],
-  "installedBy": {
-    "id": "string",
-    "email": "string"
-  }
+    "repository:contents:read",
+    "repository:pull_requests:read"
+  ]
 }
 ```
 
 ### Delete App Installation
 
 /v1/origin/app/installations/
+
+Requires scope `app:metadata:write` (app JWT).
 
 Deletes an installation that belongs to the authenticated app and prevents new installation tokens from being minted. Already-issued short-lived tokens may remain valid until they expire (at most 15 minutes). The response body is empty.
 
@@ -1003,6 +1013,8 @@ curl --request DELETE \
 ### Create Installation Access Token
 
 /v1/origin/app/installations//access\_tokens
+
+Requires scope `app:metadata:read` (app JWT).
 
 Creates an installation access token for the authenticated app.
 
@@ -1041,21 +1053,31 @@ curl --request POST \
   --url 'https://api.cursor.com/v1/origin/app/installations/INSTALLATION_ID/access_tokens' \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
-  --data '{}'
+  --data '{
+  "scopes": [
+    "repository:contents:read",
+    "repository:pull_requests:read"
+  ],
+  "repositoryIds": [
+    "repo_01k2ja2000e0080000000000q4"
+  ]
+}'
 ```
 
 **Response shape:**
 
 ```json
 {
-  "token": "string",
-  "expiresAt": "2026-01-01T00:00:00Z"
+  "token": "oit_2v8xkq4m1c7p9t3w5y0z6r4b",
+  "expiresAt": "2026-08-01T10:30:00Z"
 }
 ```
 
 ### List App Installation Repositories
 
 /v1/origin/installation/repos
+
+Requires scope `installation:metadata:read` (installation access token).
 
 Lists repositories accessible to the authenticated app installation.
 
@@ -1149,30 +1171,30 @@ curl --request GET \
 {
   "repositories": [
     {
-      "id": "string",
-      "name": "string",
-      "fullName": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
+      "fullName": "acme/rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       },
-      "defaultBranch": "string",
-      "mirror": {
-        "source": "github",
-        "sourceId": "string",
-        "status": "inbound"
-      }
+      "defaultBranch": "main",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "pushedAt": "2026-08-02T14:45:00Z",
+      "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git"
     }
   ],
-  "nextPageToken": "string",
-  "repoSelectionMode": "all"
+  "repoSelectionMode": "selected"
 }
 ```
 
 ### List Webhook Deliveries
 
 /v1/origin/app/webhook/deliveries
+
+Requires scope `app:webhook_deliveries:read` (app JWT).
 
 Lists webhook deliveries for the authenticated app, newest first.
 
@@ -1310,39 +1332,39 @@ curl --request GET \
 {
   "deliveries": [
     {
-      "id": "string",
+      "id": "whd_01k2ja2000e0080000000000j9",
       "event": {
-        "id": "string",
-        "type": "string"
+        "id": "evt_01k2ja2000e0080000000000r5",
+        "type": "pull_request.created"
       },
       "installation": {
-        "id": "string",
+        "id": "inst_01k2ja2000e0080000000000b2",
         "target": {
-          "slug": "string",
-          "id": "string",
+          "slug": "acme",
+          "id": "ns_01k2ja2000e0080000000000p3",
           "type": "team"
         }
       },
-      "createdAt": "2026-01-01T00:00:00Z",
-      "deliveredAt": "2026-01-01T00:00:00Z",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "deliveredAt": "2026-08-02T14:45:05Z",
       "lastAttempt": {
-        "id": "string",
-        "deliveryId": "string",
+        "id": "wha_01k2ja2000e0080000000000k0",
+        "deliveryId": "whd_01k2ja2000e0080000000000j9",
         "trigger": "automatic",
-        "responseStatusCode": 0,
-        "latencyMs": 0,
-        "errorMessage": "string",
-        "attemptedAt": "2026-01-01T00:00:00Z"
+        "responseStatusCode": 200,
+        "latencyMs": 182,
+        "attemptedAt": "2026-08-02T14:45:05Z"
       }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Batch Redeliver Webhook Deliveries
 
 /v1/origin/app/webhook/deliveries:batchRedeliver
+
+Requires scope `app:webhook_deliveries:write` (app JWT).
 
 Asks Origin to send deliveries again.
 
@@ -1375,7 +1397,7 @@ curl --request POST \
   --header 'Content-Type: application/json' \
   --data '{
   "deliveryIds": [
-    "DELIVERY_ID"
+    "whd_01k2ja2000e0080000000000j9"
   ]
 }'
 ```
@@ -1386,7 +1408,7 @@ curl --request POST \
 {
   "results": [
     {
-      "deliveryId": "string",
+      "deliveryId": "whd_01k2ja2000e0080000000000j9",
       "outcome": "queued"
     }
   ]
@@ -1396,6 +1418,8 @@ curl --request POST \
 ### Ping Webhook
 
 /v1/origin/app/webhook/pings
+
+Requires scope `app:webhook_deliveries:write` (app JWT).
 
 Sends a test delivery to the authenticated app's webhook URL and reports what the receiver answered.
 
@@ -1439,8 +1463,8 @@ curl --request POST \
 
 ```json
 {
-  "deliveryId": "string",
-  "eventId": "string",
+  "deliveryId": "whd_01k2ja2000e0080000000000j9",
+  "eventId": "evt_01k2ja2000e0080000000000r5",
   "delivered": true,
   "responseStatusCode": 200
 }
@@ -1455,6 +1479,8 @@ Partners discover their repositories through [List App Installation Repositories
 ### List Repos
 
 /v1/origin/repos/
+
+Requires scope `namespace:repositories:read` (user credential).
 
 Lists repos belonging to an owner entity.
 
@@ -1564,33 +1590,29 @@ curl --request GET \
 {
   "repositories": [
     {
-      "id": "string",
-      "name": "string",
-      "fullName": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
+      "fullName": "acme/rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       },
-      "defaultBranch": "string",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "pushedAt": "2026-01-01T00:00:00Z",
-      "cloneUrl": "string",
-      "mirror": {
-        "source": "github",
-        "sourceId": "string",
-        "status": "inbound"
-      }
+      "defaultBranch": "main",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "pushedAt": "2026-08-02T14:45:00Z",
+      "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git"
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get Repo
 
 /v1/origin/repos//
+
+Requires scope `repository:metadata:read` (installation access token or user credential).
 
 Returns a single repo by its `(owner_id, name)` identifier.
 
@@ -1682,30 +1704,27 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "fullName": "string",
+  "id": "repo_01k2ja2000e0080000000000q4",
+  "name": "rocket",
+  "fullName": "acme/rocket",
   "owner": {
-    "slug": "string",
-    "id": "string",
+    "slug": "acme",
+    "id": "ns_01k2ja2000e0080000000000p3",
     "type": "team"
   },
-  "defaultBranch": "string",
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "pushedAt": "2026-01-01T00:00:00Z",
-  "cloneUrl": "string",
-  "mirror": {
-    "source": "github",
-    "sourceId": "string",
-    "status": "inbound"
-  }
+  "defaultBranch": "main",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "pushedAt": "2026-08-02T14:45:00Z",
+  "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git"
 }
 ```
 
 ### Create Repo
 
 /v1/origin/repos/
+
+Requires scope `namespace:new_repository:write` (user credential).
 
 Creates a repo belonging to an owner.
 
@@ -1803,7 +1822,8 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "name": "NAME"
+  "name": "rocket",
+  "defaultBranch": "main"
 }'
 ```
 
@@ -1811,30 +1831,27 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "fullName": "string",
+  "id": "repo_01k2ja2000e0080000000000q4",
+  "name": "rocket",
+  "fullName": "acme/rocket",
   "owner": {
-    "slug": "string",
-    "id": "string",
+    "slug": "acme",
+    "id": "ns_01k2ja2000e0080000000000p3",
     "type": "team"
   },
-  "defaultBranch": "string",
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "pushedAt": "2026-01-01T00:00:00Z",
-  "cloneUrl": "string",
-  "mirror": {
-    "source": "github",
-    "sourceId": "string",
-    "status": "inbound"
-  }
+  "defaultBranch": "main",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "pushedAt": "2026-08-02T14:45:00Z",
+  "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git"
 }
 ```
 
 ### List Branches
 
 /v1/origin/repos///branches
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists the repo's branches and tip commits in ascending name order, paginated with `page_size` and `page_token`.
 
@@ -1892,19 +1909,20 @@ curl --request GET \
 {
   "branches": [
     {
-      "name": "string",
+      "name": "main",
       "commit": {
-        "sha": "string"
+        "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
       }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get Repo Tarball
 
 /v1/origin/repos///tarball/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Downloads a gzip-compressed tar of the repository tree at `ref`.
 
@@ -1946,14 +1964,16 @@ curl --request GET --location --output repo.tar.gz \
 
 ```json
 {
-  "downloadUrl": "string",
-  "sha": "string"
+  "downloadUrl": "https://artifacts.origin.cursor.com/tarballs/0192f7a4-6c1e-7b3a-9f21-3d54c9a7e6b0/9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4.tar.gz?Expires=1767225600&Signature=EXAMPLE&Key-Pair-Id=KEXAMPLE123",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
 }
 ```
 
 ### Sync Mirror
 
 /v1/origin/repos//:syncMirror
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Synchronizes one ref of a mirrored repository from its upstream source. Returns HTTP `200` when the sync target is satisfied, or HTTP `202` when the sync is still pending. `wait=false` (the default) schedules the sync and usually returns `202`; it returns `200` immediately when `sha` is already reachable from `ref`. `wait=true` blocks until satisfied or the wait budget (\~2 minutes) expires; expiry still returns `202` and the sync continues in the background. Repositories that do not pull from an upstream source are rejected.
 
@@ -2021,6 +2041,8 @@ curl --request POST \
 ### Post Check Run
 
 /v1/origin/repos///check-runs
+
+Requires scope `repository:checks:write` (installation access token).
 
 Upserts a check suite + check run using an installation access token with `repository:checks:write`. The write is attributed to the app that owns the authenticated installation. A repeated call with the same `(repo, head_sha, suite.key, check.key)` updates the existing check run in place rather than creating a duplicate.
 
@@ -2382,18 +2404,28 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "headSha": "HEAD_SHA",
+  "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
   "checkSuite": {
-    "key": "KEY",
-    "name": "NAME",
-    "externalId": "EXTERNAL_ID"
+    "key": "ci-8842",
+    "name": "CI",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "externalId": "build-8842"
   },
   "checkRun": {
-    "key": "KEY",
-    "name": "NAME",
-    "status": "queued",
-    "externalUpdatedAt": "2026-01-01T00:00:00Z",
-    "externalId": "EXTERNAL_ID"
+    "key": "ci-8842-unit-tests",
+    "name": "unit-tests",
+    "status": "completed",
+    "conclusion": "success",
+    "externalUpdatedAt": "2026-08-02T14:44:30Z",
+    "startedAt": "2026-08-02T14:40:00Z",
+    "completedAt": "2026-08-02T14:44:30Z",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "externalId": "run-8842",
+    "output": {
+      "title": "Unit tests",
+      "summary": "128 tests passed.",
+      "text": "All suites green."
+    }
   }
 }'
 ```
@@ -2403,68 +2435,67 @@ curl --request POST \
 ```json
 {
   "checkSuite": {
-    "id": "string",
+    "id": "crg_01k2ja2000e0080000000000h8",
     "repository": {
-      "id": "string",
-      "name": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       }
     },
-    "sha": "string",
-    "key": "string",
-    "name": "string",
-    "detailsUrl": "string",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z",
-    "externalId": "string",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "key": "ci-8842",
+    "name": "CI",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z",
+    "externalId": "build-8842",
     "actor": {
       "user": {
-        "id": "string",
-        "email": "string"
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
       }
     }
   },
   "checkRun": {
-    "id": "string",
+    "id": "cr_01k2ja2000e0080000000000g7",
     "repository": {
-      "id": "string",
-      "name": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       }
     },
     "checkSuite": {
-      "id": "string"
+      "id": "crg_01k2ja2000e0080000000000h8"
     },
-    "sha": "string",
-    "key": "string",
-    "name": "string",
-    "status": "queued",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "key": "ci-8842-unit-tests",
+    "name": "unit-tests",
+    "status": "completed",
     "conclusion": "success",
-    "detailsUrl": "string",
-    "externalUpdatedAt": "2026-01-01T00:00:00Z",
-    "startedAt": "2026-01-01T00:00:00Z",
-    "completedAt": "2026-01-01T00:00:00Z",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z",
-    "externalId": "string",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "externalUpdatedAt": "2026-08-02T14:44:30Z",
+    "startedAt": "2026-08-02T14:40:00Z",
+    "completedAt": "2026-08-02T14:44:30Z",
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z",
+    "externalId": "run-8842",
     "actor": {
       "user": {
-        "id": "string",
-        "email": "string"
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
       }
     },
     "output": {
-      "title": "string",
-      "summary": "string",
-      "text": "string"
-    },
-    "deadlineAt": "2026-01-01T00:00:00Z"
+      "title": "Unit tests",
+      "summary": "128 tests passed.",
+      "text": "All suites green."
+    }
   }
 }
 ```
@@ -2472,6 +2503,8 @@ curl --request POST \
 ### Batch Upsert Check Runs
 
 /v1/origin/repos///check-runs:batchUpsert
+
+Requires scope `repository:checks:write` (installation access token).
 
 Atomically upserts several check runs belonging to one suite. The request accepts at most 10 runs and rejects duplicate `(external_id, key)` identities. Every run is committed or the entire request is rolled back.
 
@@ -2829,19 +2862,29 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "headSha": "HEAD_SHA",
+  "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
   "checkSuite": {
-    "key": "KEY",
-    "name": "NAME",
-    "externalId": "EXTERNAL_ID"
+    "key": "ci-8842",
+    "name": "CI",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "externalId": "build-8842"
   },
   "checkRuns": [
     {
-      "key": "KEY",
-      "name": "NAME",
-      "status": "queued",
-      "externalUpdatedAt": "2026-01-01T00:00:00Z",
-      "externalId": "EXTERNAL_ID"
+      "key": "ci-8842-unit-tests",
+      "name": "unit-tests",
+      "status": "completed",
+      "conclusion": "success",
+      "externalUpdatedAt": "2026-08-02T14:44:30Z",
+      "startedAt": "2026-08-02T14:40:00Z",
+      "completedAt": "2026-08-02T14:44:30Z",
+      "detailsUrl": "https://ci.acme.dev/runs/8842",
+      "externalId": "run-8842",
+      "output": {
+        "title": "Unit tests",
+        "summary": "128 tests passed.",
+        "text": "All suites green."
+      }
     }
   ]
 }'
@@ -2852,69 +2895,68 @@ curl --request POST \
 ```json
 {
   "checkSuite": {
-    "id": "string",
+    "id": "crg_01k2ja2000e0080000000000h8",
     "repository": {
-      "id": "string",
-      "name": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       }
     },
-    "sha": "string",
-    "key": "string",
-    "name": "string",
-    "detailsUrl": "string",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z",
-    "externalId": "string",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "key": "ci-8842",
+    "name": "CI",
+    "detailsUrl": "https://ci.acme.dev/runs/8842",
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z",
+    "externalId": "build-8842",
     "actor": {
       "user": {
-        "id": "string",
-        "email": "string"
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
       }
     }
   },
   "checkRuns": [
     {
-      "id": "string",
+      "id": "cr_01k2ja2000e0080000000000g7",
       "repository": {
-        "id": "string",
-        "name": "string",
+        "id": "repo_01k2ja2000e0080000000000q4",
+        "name": "rocket",
         "owner": {
-          "slug": "string",
-          "id": "string",
+          "slug": "acme",
+          "id": "ns_01k2ja2000e0080000000000p3",
           "type": "team"
         }
       },
       "checkSuite": {
-        "id": "string"
+        "id": "crg_01k2ja2000e0080000000000h8"
       },
-      "sha": "string",
-      "key": "string",
-      "name": "string",
-      "status": "queued",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "key": "ci-8842-unit-tests",
+      "name": "unit-tests",
+      "status": "completed",
       "conclusion": "success",
-      "detailsUrl": "string",
-      "externalUpdatedAt": "2026-01-01T00:00:00Z",
-      "startedAt": "2026-01-01T00:00:00Z",
-      "completedAt": "2026-01-01T00:00:00Z",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "externalId": "string",
+      "detailsUrl": "https://ci.acme.dev/runs/8842",
+      "externalUpdatedAt": "2026-08-02T14:44:30Z",
+      "startedAt": "2026-08-02T14:40:00Z",
+      "completedAt": "2026-08-02T14:44:30Z",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "externalId": "run-8842",
       "actor": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
       "output": {
-        "title": "string",
-        "summary": "string",
-        "text": "string"
-      },
-      "deadlineAt": "2026-01-01T00:00:00Z"
+        "title": "Unit tests",
+        "summary": "128 tests passed.",
+        "text": "All suites green."
+      }
     }
   ]
 }
@@ -2923,6 +2965,8 @@ curl --request POST \
 ### Get Check Run
 
 /v1/origin/repos///check-runs/
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Returns a single check run by server-assigned id (`cr_...`).
 
@@ -3096,49 +3140,50 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
+  "id": "cr_01k2ja2000e0080000000000g7",
   "repository": {
-    "id": "string",
-    "name": "string",
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
     "owner": {
-      "slug": "string",
-      "id": "string",
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
       "type": "team"
     }
   },
   "checkSuite": {
-    "id": "string"
+    "id": "crg_01k2ja2000e0080000000000h8"
   },
-  "sha": "string",
-  "key": "string",
-  "name": "string",
-  "status": "queued",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+  "key": "ci-8842-unit-tests",
+  "name": "unit-tests",
+  "status": "completed",
   "conclusion": "success",
-  "detailsUrl": "string",
-  "externalUpdatedAt": "2026-01-01T00:00:00Z",
-  "startedAt": "2026-01-01T00:00:00Z",
-  "completedAt": "2026-01-01T00:00:00Z",
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "externalId": "string",
+  "detailsUrl": "https://ci.acme.dev/runs/8842",
+  "externalUpdatedAt": "2026-08-02T14:44:30Z",
+  "startedAt": "2026-08-02T14:40:00Z",
+  "completedAt": "2026-08-02T14:44:30Z",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "externalId": "run-8842",
   "actor": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
   "output": {
-    "title": "string",
-    "summary": "string",
-    "text": "string"
-  },
-  "deadlineAt": "2026-01-01T00:00:00Z"
+    "title": "Unit tests",
+    "summary": "128 tests passed.",
+    "text": "All suites green."
+  }
 }
 ```
 
 ### List Check Run Annotations
 
 /v1/origin/repos///check-runs//annotations
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Lists a check run's annotations in ascending ID order.
 
@@ -3250,32 +3295,28 @@ curl --request GET \
 {
   "annotations": [
     {
-      "id": "string",
-      "checkRunId": "string",
+      "id": "cra_01k2ja2000e0080000000000v1",
+      "checkRunId": "cr_01k2ja2000e0080000000000g7",
       "annotationLevel": "warning",
-      "message": "string",
-      "title": "string",
-      "rawDetails": "string",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
+      "message": "Deprecated API usage; migrate to the v2 client.",
+      "title": "Deprecated API",
+      "createdAt": "2026-08-02T14:45:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
       "location": {
-        "path": "string",
-        "startLine": 0,
-        "endLine": 0,
-        "columns": {
-          "startColumn": 0,
-          "endColumn": 0
-        }
+        "path": "src/telemetry.ts",
+        "startLine": 42,
+        "endLine": 42
       }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Create Check Run Annotations
 
 /v1/origin/repos///check-runs//annotations
+
+Requires scope `repository:checks:write` (installation access token).
 
 Appends between 1 and 25 annotations to a check run in a single atomic batch.
 
@@ -3420,11 +3461,12 @@ curl --request POST \
   "annotations": [
     {
       "annotationLevel": "warning",
-      "message": "MESSAGE",
+      "message": "Deprecated API usage; migrate to the v2 client.",
+      "title": "Deprecated API",
       "location": {
-        "path": "src/index.ts",
-        "startLine": 12,
-        "endLine": 12
+        "path": "src/telemetry.ts",
+        "startLine": 42,
+        "endLine": 42
       }
     }
   ]
@@ -3437,22 +3479,17 @@ curl --request POST \
 {
   "annotations": [
     {
-      "id": "string",
-      "checkRunId": "string",
+      "id": "cra_01k2ja2000e0080000000000v1",
+      "checkRunId": "cr_01k2ja2000e0080000000000g7",
       "annotationLevel": "warning",
-      "message": "string",
-      "title": "string",
-      "rawDetails": "string",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
+      "message": "Deprecated API usage; migrate to the v2 client.",
+      "title": "Deprecated API",
+      "createdAt": "2026-08-02T14:45:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
       "location": {
-        "path": "string",
-        "startLine": 0,
-        "endLine": 0,
-        "columns": {
-          "startColumn": 0,
-          "endColumn": 0
-        }
+        "path": "src/telemetry.ts",
+        "startLine": 42,
+        "endLine": 42
       }
     }
   ]
@@ -3462,6 +3499,8 @@ curl --request POST \
 ### Get Check Suite
 
 /v1/origin/repos///check-suites/
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Returns check suite metadata by server-assigned id (`crg_...`). Does not embed check runs; use `ListCheckRunsForSuite` for the suite's runs.
 
@@ -3587,27 +3626,27 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
+  "id": "crg_01k2ja2000e0080000000000h8",
   "repository": {
-    "id": "string",
-    "name": "string",
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
     "owner": {
-      "slug": "string",
-      "id": "string",
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
       "type": "team"
     }
   },
-  "sha": "string",
-  "key": "string",
-  "name": "string",
-  "detailsUrl": "string",
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "externalId": "string",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+  "key": "ci-8842",
+  "name": "CI",
+  "detailsUrl": "https://ci.acme.dev/runs/8842",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "externalId": "build-8842",
   "actor": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   }
 }
@@ -3616,6 +3655,8 @@ curl --request GET \
 ### List Check Runs For Suite
 
 /v1/origin/repos///check-suites//check-runs
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Lists check runs belonging to a suite. Paginated.
 
@@ -3809,52 +3850,52 @@ curl --request GET \
 {
   "checkRuns": [
     {
-      "id": "string",
+      "id": "cr_01k2ja2000e0080000000000g7",
       "repository": {
-        "id": "string",
-        "name": "string",
+        "id": "repo_01k2ja2000e0080000000000q4",
+        "name": "rocket",
         "owner": {
-          "slug": "string",
-          "id": "string",
+          "slug": "acme",
+          "id": "ns_01k2ja2000e0080000000000p3",
           "type": "team"
         }
       },
       "checkSuite": {
-        "id": "string"
+        "id": "crg_01k2ja2000e0080000000000h8"
       },
-      "sha": "string",
-      "key": "string",
-      "name": "string",
-      "status": "queued",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "key": "ci-8842-unit-tests",
+      "name": "unit-tests",
+      "status": "completed",
       "conclusion": "success",
-      "detailsUrl": "string",
-      "externalUpdatedAt": "2026-01-01T00:00:00Z",
-      "startedAt": "2026-01-01T00:00:00Z",
-      "completedAt": "2026-01-01T00:00:00Z",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "externalId": "string",
+      "detailsUrl": "https://ci.acme.dev/runs/8842",
+      "externalUpdatedAt": "2026-08-02T14:44:30Z",
+      "startedAt": "2026-08-02T14:40:00Z",
+      "completedAt": "2026-08-02T14:44:30Z",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "externalId": "run-8842",
       "actor": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
       "output": {
-        "title": "string",
-        "summary": "string",
-        "text": "string"
-      },
-      "deadlineAt": "2026-01-01T00:00:00Z"
+        "title": "Unit tests",
+        "summary": "128 tests passed.",
+        "text": "All suites green."
+      }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### List Check Runs For Commit
 
 /v1/origin/repos///commits//check-runs
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Lists every check run reported against a commit, across all suites. Paginated.
 
@@ -4048,52 +4089,52 @@ curl --request GET \
 {
   "checkRuns": [
     {
-      "id": "string",
+      "id": "cr_01k2ja2000e0080000000000g7",
       "repository": {
-        "id": "string",
-        "name": "string",
+        "id": "repo_01k2ja2000e0080000000000q4",
+        "name": "rocket",
         "owner": {
-          "slug": "string",
-          "id": "string",
+          "slug": "acme",
+          "id": "ns_01k2ja2000e0080000000000p3",
           "type": "team"
         }
       },
       "checkSuite": {
-        "id": "string"
+        "id": "crg_01k2ja2000e0080000000000h8"
       },
-      "sha": "string",
-      "key": "string",
-      "name": "string",
-      "status": "queued",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "key": "ci-8842-unit-tests",
+      "name": "unit-tests",
+      "status": "completed",
       "conclusion": "success",
-      "detailsUrl": "string",
-      "externalUpdatedAt": "2026-01-01T00:00:00Z",
-      "startedAt": "2026-01-01T00:00:00Z",
-      "completedAt": "2026-01-01T00:00:00Z",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "externalId": "string",
+      "detailsUrl": "https://ci.acme.dev/runs/8842",
+      "externalUpdatedAt": "2026-08-02T14:44:30Z",
+      "startedAt": "2026-08-02T14:40:00Z",
+      "completedAt": "2026-08-02T14:44:30Z",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "externalId": "run-8842",
       "actor": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
       "output": {
-        "title": "string",
-        "summary": "string",
-        "text": "string"
-      },
-      "deadlineAt": "2026-01-01T00:00:00Z"
+        "title": "Unit tests",
+        "summary": "128 tests passed.",
+        "text": "All suites green."
+      }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### List Check Suites For Commit
 
 /v1/origin/repos///commits//check-suites
+
+Requires scope `repository:checks:read` (installation access token or user credential).
 
 Lists check suites reported against a commit. Returns suite metadata only (no embedded runs). Paginated.
 
@@ -4239,32 +4280,31 @@ curl --request GET \
 {
   "checkSuites": [
     {
-      "id": "string",
+      "id": "crg_01k2ja2000e0080000000000h8",
       "repository": {
-        "id": "string",
-        "name": "string",
+        "id": "repo_01k2ja2000e0080000000000q4",
+        "name": "rocket",
         "owner": {
-          "slug": "string",
-          "id": "string",
+          "slug": "acme",
+          "id": "ns_01k2ja2000e0080000000000p3",
           "type": "team"
         }
       },
-      "sha": "string",
-      "key": "string",
-      "name": "string",
-      "detailsUrl": "string",
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "externalId": "string",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "key": "ci-8842",
+      "name": "CI",
+      "detailsUrl": "https://ci.acme.dev/runs/8842",
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "externalId": "build-8842",
       "actor": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
@@ -4277,6 +4317,8 @@ A comparison is a summary only: it never embeds commit lists or file diffs. `sta
 ### List Commits
 
 /v1/origin/repos///commits
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists commits on a branch or starting ref.
 
@@ -4388,37 +4430,43 @@ curl --request GET \
 {
   "commits": [
     {
-      "sha": "string",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
       "commit": {
         "author": {
-          "name": "string",
-          "email": "string",
-          "date": "string"
+          "name": "Jane Doe",
+          "email": "jane@acme.dev",
+          "date": "2026-08-01T09:30:00Z"
         },
         "committer": {
-          "name": "string",
-          "email": "string",
-          "date": "string"
+          "name": "Jane Doe",
+          "email": "jane@acme.dev",
+          "date": "2026-08-01T09:30:00Z"
         },
-        "message": "string",
+        "message": "Add launch telemetry",
         "tree": {
-          "sha": "string"
+          "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
         }
       },
       "parents": [
         {
-          "sha": "string"
+          "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
         }
-      ]
+      ],
+      "stats": {
+        "additions": 128,
+        "deletions": 46,
+        "total": 174
+      }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get Commit
 
 /v1/origin/repos///commits/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns a single commit by SHA or ref with whole-commit aggregate `stats`. It does not include changed files; use [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files).
 
@@ -4526,32 +4574,32 @@ curl --request GET \
 
 ```json
 {
-  "sha": "string",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
   "commit": {
     "author": {
-      "name": "string",
-      "email": "string",
-      "date": "string"
+      "name": "Jane Doe",
+      "email": "jane@acme.dev",
+      "date": "2026-08-01T09:30:00Z"
     },
     "committer": {
-      "name": "string",
-      "email": "string",
-      "date": "string"
+      "name": "Jane Doe",
+      "email": "jane@acme.dev",
+      "date": "2026-08-01T09:30:00Z"
     },
-    "message": "string",
+    "message": "Add launch telemetry",
     "tree": {
-      "sha": "string"
+      "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
     }
   },
   "parents": [
     {
-      "sha": "string"
+      "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
     }
   ],
   "stats": {
-    "additions": 0,
-    "deletions": 0,
-    "total": 0
+    "additions": 128,
+    "deletions": 46,
+    "total": 174
   }
 }
 ```
@@ -4559,6 +4607,8 @@ curl --request GET \
 ### List Commit Files
 
 /v1/origin/repos///commits//files
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists the files changed by a commit.
 
@@ -4638,22 +4688,22 @@ curl --request GET \
 {
   "files": [
     {
-      "filename": "string",
-      "status": "string",
-      "additions": 0,
-      "deletions": 0,
-      "changes": 0,
-      "patch": "string",
-      "previousFilename": "string"
+      "filename": "src/telemetry.ts",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 3,
+      "changes": 9,
+      "patch": "@@ -12,6 +12,9 @@\n import { ignite } from \"./ignition\";\n+import { emitLaunchTelemetry } from \"./telemetry\";\n"
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Compare Commits
 
 /v1/origin/repos///compare/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Compares commits, refs, or tags relative to their merge base. `basehead` is `"{base}...{head}"`; refs containing "/" must use their SHA.
 
@@ -4889,80 +4939,95 @@ curl --request GET \
 
 ```json
 {
-  "status": "identical",
-  "aheadBy": 0,
+  "status": "ahead",
+  "aheadBy": 2,
   "behindBy": 0,
   "baseCommit": {
-    "sha": "string",
+    "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
     "commit": {
       "author": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
       "committer": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
-      "message": "string",
+      "message": "Add launch telemetry",
       "tree": {
-        "sha": "string"
+        "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
       }
     },
     "parents": [
       {
-        "sha": "string"
+        "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
       }
-    ]
+    ],
+    "stats": {
+      "additions": 128,
+      "deletions": 46,
+      "total": 174
+    }
   },
   "headCommit": {
-    "sha": "string",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
     "commit": {
       "author": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
       "committer": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
-      "message": "string",
+      "message": "Add launch telemetry",
       "tree": {
-        "sha": "string"
+        "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
       }
     },
     "parents": [
       {
-        "sha": "string"
+        "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
       }
-    ]
+    ],
+    "stats": {
+      "additions": 128,
+      "deletions": 46,
+      "total": 174
+    }
   },
   "mergeBaseCommit": {
-    "sha": "string",
+    "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
     "commit": {
       "author": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
       "committer": {
-        "name": "string",
-        "email": "string",
-        "date": "string"
+        "name": "Jane Doe",
+        "email": "jane@acme.dev",
+        "date": "2026-08-01T09:30:00Z"
       },
-      "message": "string",
+      "message": "Add launch telemetry",
       "tree": {
-        "sha": "string"
+        "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
       }
     },
     "parents": [
       {
-        "sha": "string"
+        "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
       }
-    ]
+    ],
+    "stats": {
+      "additions": 128,
+      "deletions": 46,
+      "total": 174
+    }
   }
 }
 ```
@@ -4970,6 +5035,8 @@ curl --request GET \
 ### List Comparison Files
 
 /v1/origin/repos///compare//files
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists the files changed by a comparison: the diff of `head` against the merge base of `base` and `head`.
 
@@ -5049,22 +5116,22 @@ curl --request GET \
 {
   "files": [
     {
-      "filename": "string",
-      "status": "string",
-      "additions": 0,
-      "deletions": 0,
-      "changes": 0,
-      "patch": "string",
-      "previousFilename": "string"
+      "filename": "src/telemetry.ts",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 3,
+      "changes": 9,
+      "patch": "@@ -12,6 +12,9 @@\n import { ignite } from \"./ignition\";\n+import { emitLaunchTelemetry } from \"./telemetry\";\n"
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get Contents
 
 /v1/origin/repos///contents
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns file or directory contents at a ref. The file path is passed as the `path` query parameter (supports nested paths); omit or leave empty for the repository root directory. Files larger than 1 MiB (decoded) are rejected with `FailedPrecondition` (HTTP 400).
 
@@ -5134,44 +5201,21 @@ curl --request GET \
 
 ```json
 {
-  "type": "string",
-  "encoding": "string",
-  "size": "string",
-  "name": "string",
-  "path": "string",
-  "sha": "string",
-  "content": "string",
-  "entries": [
-    {
-      "type": "string",
-      "encoding": "string",
-      "size": "string",
-      "name": "string",
-      "path": "string",
-      "sha": "string",
-      "content": "string",
-      "entries": [
-        {
-          "type": "string",
-          "encoding": "string",
-          "size": "string",
-          "name": "string",
-          "path": "string",
-          "sha": "string",
-          "content": "string",
-          "entries": [
-            {}
-          ]
-        }
-      ]
-    }
-  ]
+  "type": "file",
+  "encoding": "base64",
+  "size": "312",
+  "name": "telemetry.ts",
+  "path": "src/telemetry.ts",
+  "sha": "c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+  "content": "Y29uc29sZS5sb2coImxhdW5jaCIpOwo="
 }
 ```
 
 ### Batch Get Contents
 
 /v1/origin/repos///contents:batchGet
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns the contents of several explicit paths at a ref in one request. Each requested path yields a result marking whether it was found; a found path carries the same `Content` shape as `GetContents` (files as base64, directories as immediate `entries`, symlinks as files). Paths are matched exactly, with no globs or patterns, and at most 20 may be requested; duplicates are removed. Response results preserve first-seen request order. A single file larger than the [Get Contents](https://cursor.com/docs/api/origin/llms-full.txt#get-contents) 1 MiB cap fails the whole batch with `FailedPrecondition` (HTTP 400). Uses POST because the path list travels in the request body.
 
@@ -5256,8 +5300,9 @@ curl --request POST \
   --header 'Content-Type: application/json' \
   --data '{
   "paths": [
-    "PATH"
-  ]
+    "src/telemetry.ts"
+  ],
+  "ref": "main"
 }'
 ```
 
@@ -5267,23 +5312,20 @@ curl --request POST \
 {
   "results": [
     {
-      "path": "string",
-      "found": false,
+      "path": "src/telemetry.ts",
+      "found": true,
       "content": {
-        "type": "string",
-        "encoding": "string",
-        "size": "string",
-        "name": "string",
-        "path": "string",
-        "sha": "string",
-        "content": "string",
-        "entries": [
-          {}
-        ]
+        "type": "file",
+        "encoding": "base64",
+        "size": "312",
+        "name": "telemetry.ts",
+        "path": "src/telemetry.ts",
+        "sha": "c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+        "content": "Y29uc29sZS5sb2coImxhdW5jaCIpOwo="
       }
     }
   ],
-  "resolvedCommitSha": "string"
+  "resolvedCommitSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
 }
 ```
 
@@ -5294,6 +5336,8 @@ Low-level git objects. Scope: `repository:contents:read`. Empty repositories ret
 ### Get Blob
 
 /v1/origin/repos///git/blobs/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns a Git blob object by SHA. Default response is JSON with MIME-wrapped base64 `content`. Pass `Accept: application/vnd.origin.raw+json` (or `application/vnd.origin.raw`) on the REST surface to receive raw blob bytes instead. Blobs larger than 4 MiB (decoded) are rejected; fetch larger files by cloning the repository over [Git HTTPS](https://cursor.com/docs/api/origin/llms-full.txt#git-https-authentication). Empty repositories return 409 Conflict.
 
@@ -5339,16 +5383,18 @@ curl --request GET \
 
 ```json
 {
-  "sha": "string",
-  "size": 0,
-  "encoding": "string",
-  "content": "string"
+  "sha": "c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+  "size": 312,
+  "encoding": "base64",
+  "content": "Y29uc29sZS5sb2coImxhdW5jaCIpOwo="
 }
 ```
 
 ### Get Git Commit
 
 /v1/origin/repos///git/commits/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns a Git commit object by SHA (or resolvable revision). This is the low-level Git Database commit shape (flat author/message/tree), not the higher-level `GetCommit` resource under `/commits/{sha}`. `sha` accepts a commit SHA, branch, tag, or symbolic ref such as `HEAD`. Empty repositories return 409 Conflict.
 
@@ -5434,24 +5480,24 @@ curl --request GET \
 
 ```json
 {
-  "sha": "string",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
   "author": {
-    "name": "string",
-    "email": "string",
-    "date": "string"
+    "name": "Jane Doe",
+    "email": "jane@acme.dev",
+    "date": "2026-08-01T09:30:00Z"
   },
   "committer": {
-    "name": "string",
-    "email": "string",
-    "date": "string"
+    "name": "Jane Doe",
+    "email": "jane@acme.dev",
+    "date": "2026-08-01T09:30:00Z"
   },
-  "message": "string",
+  "message": "Add launch telemetry",
   "tree": {
-    "sha": "string"
+    "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
   },
   "parents": [
     {
-      "sha": "string"
+      "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
     }
   ]
 }
@@ -5460,6 +5506,8 @@ curl --request GET \
 ### Get Git Ref
 
 /v1/origin/repos///git/ref/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns a single Git reference by name. `ref` is typically `heads/<branch>` or `tags/<tag>` (with or without a leading `refs/`), or the symbolic `HEAD`. Exact match only; use ListMatchingGitRefs for prefixes. Empty repositories return 409 Conflict.
 
@@ -5505,10 +5553,10 @@ curl --request GET \
 
 ```json
 {
-  "ref": "string",
+  "ref": "refs/heads/main",
   "object": {
-    "sha": "string",
-    "type": "string"
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "type": "commit"
   }
 }
 ```
@@ -5516,6 +5564,8 @@ curl --request GET \
 ### List Matching Git Refs
 
 /v1/origin/repos///git/matching-refs
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists Git references whose names start with the given prefix. REST responses unwrap to a JSON array (via `response_body`). A trailing slash on `ref` is preserved (`heads/` → `refs/heads/`). The symbolic `HEAD` is matched exactly (it is not under `refs/`). Empty repositories return 409 Conflict.
 
@@ -5564,20 +5614,24 @@ curl --request GET \
 **Response shape:**
 
 ```json
-[
-  {
-    "ref": "string",
-    "object": {
-      "sha": "string",
-      "type": "string"
+{
+  "refs": [
+    {
+      "ref": "refs/heads/main",
+      "object": {
+        "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+        "type": "commit"
+      }
     }
-  }
-]
+  ]
+}
 ```
 
 ### List Matching Git Refs by Path
 
 /v1/origin/repos///git/matching-refs/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Lists Git references whose names start with the given prefix. REST responses unwrap to a JSON array (via `response_body`). A trailing slash on `ref` is preserved (`heads/` → `refs/heads/`). The symbolic `HEAD` is matched exactly (it is not under `refs/`). Empty repositories return 409 Conflict.
 
@@ -5624,20 +5678,24 @@ curl --request GET \
 **Response shape:**
 
 ```json
-[
-  {
-    "ref": "string",
-    "object": {
-      "sha": "string",
-      "type": "string"
+{
+  "refs": [
+    {
+      "ref": "refs/heads/main",
+      "object": {
+        "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+        "type": "commit"
+      }
     }
-  }
-]
+  ]
+}
 ```
 
 ### Get Tag
 
 /v1/origin/repos///git/tags/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns an annotated Git tag object by SHA. Lightweight tags are not tag objects and return NotFound. Empty repositories return 409 Conflict.
 
@@ -5707,17 +5765,17 @@ curl --request GET \
 
 ```json
 {
-  "sha": "string",
-  "tag": "string",
-  "message": "string",
+  "sha": "e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2",
+  "tag": "v1.2.0",
+  "message": "Release v1.2.0",
   "tagger": {
-    "name": "string",
-    "email": "string",
-    "date": "string"
+    "name": "Jane Doe",
+    "email": "jane@acme.dev",
+    "date": "2026-08-01T09:30:00Z"
   },
   "object": {
-    "sha": "string",
-    "type": "string"
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "type": "commit"
   }
 }
 ```
@@ -5725,6 +5783,8 @@ curl --request GET \
 ### Get Tree
 
 /v1/origin/repos///git/trees/
+
+Requires scope `repository:contents:read` (installation access token or user credential).
 
 Returns a Git tree object by SHA or resolvable revision. `sha` accepts a tree SHA, commit SHA, branch, tag, or symbolic ref such as `HEAD`. Set `recursive=true` (or `1`) to walk the whole tree; omitting the parameter or passing any other value lists immediate children only. Recursive listings truncate at 100,000 entries or 7 MiB and set `truncated=true`. Empty repositories return 409 Conflict.
 
@@ -5792,14 +5852,14 @@ curl --request GET \
 
 ```json
 {
-  "sha": "string",
+  "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8",
   "tree": [
     {
-      "path": "string",
-      "mode": "string",
-      "type": "string",
-      "sha": "string",
-      "size": 0
+      "path": "src/telemetry.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0",
+      "size": 312
     }
   ],
   "truncated": false
@@ -5813,6 +5873,8 @@ A label definition belongs to one repository and is addressed by its name. Assig
 ### List Labels
 
 /v1/origin/repos///labels
+
+Requires scope `repository:labels:read` (installation access token or user credential).
 
 Lists the labels defined on a repository, ordered by name.
 
@@ -5876,19 +5938,20 @@ curl --request GET \
 {
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Create Label
 
 /v1/origin/repos///labels
+
+Requires scope `repository:labels:write` (installation access token or user credential).
 
 Creates a label on a repository.
 
@@ -5942,8 +6005,9 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "name": "LABEL_NAME",
-  "color": "0e8a16"
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something isn'\''t working"
 }'
 ```
 
@@ -5951,16 +6015,18 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "color": "string",
-  "description": "string"
+  "id": "lbl_01k2ja2000e0080000000000m1",
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something isn't working"
 }
 ```
 
 ### Get Label
 
 /v1/origin/repos///labels/
+
+Requires scope `repository:labels:read` (installation access token or user credential).
 
 Returns a single repository label by name.
 
@@ -6008,16 +6074,18 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "color": "string",
-  "description": "string"
+  "id": "lbl_01k2ja2000e0080000000000m1",
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something isn't working"
 }
 ```
 
 ### Delete Label
 
 /v1/origin/repos///labels/
+
+Requires scope `repository:labels:write` (installation access token or user credential).
 
 Deletes a repository label by name. The response body is empty.
 
@@ -6056,6 +6124,8 @@ curl --request DELETE \
 ### Update Label
 
 /v1/origin/repos///labels/
+
+Requires scope `repository:labels:write` (installation access token or user credential).
 
 Updates a repository label identified by its current name.
 
@@ -6121,10 +6191,10 @@ curl --request PATCH \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "color": "string",
-  "description": "string"
+  "id": "lbl_01k2ja2000e0080000000000m1",
+  "name": "bug",
+  "color": "b60205",
+  "description": "Something isn't working"
 }
 ```
 
@@ -6139,6 +6209,8 @@ Comments expose a `thread` reference for grouping. Create-comment requests still
 ### List Pull Requests
 
 /v1/origin/repos///pulls
+
+Requires scope `repository:pull_requests:read` (installation access token or user credential).
 
 Lists pull requests in a repo, optionally filtered by head branch, base branch, author, creation-time range, and state. Each pull request includes its assigned labels.
 
@@ -6374,58 +6446,56 @@ curl --request GET \
 {
   "pullRequests": [
     {
-      "id": "string",
-      "number": "string",
-      "state": "string",
+      "id": "pr_01k2ja2000e0080000000000d4",
+      "number": "17",
+      "state": "open",
       "draft": false,
       "merged": false,
-      "title": "string",
-      "body": "string",
+      "title": "Add launch telemetry",
+      "body": "Adds structured launch telemetry to the ignition path.",
       "head": {
-        "ref": "string",
-        "sha": "string"
+        "ref": "add-telemetry",
+        "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
       },
       "base": {
-        "ref": "string",
-        "sha": "string"
+        "ref": "main",
+        "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
       },
       "author": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z",
-      "closedAt": "2026-01-01T00:00:00Z",
-      "mergedAt": "2026-01-01T00:00:00Z",
-      "mergeCommitSha": "string",
-      "additions": 0,
-      "deletions": 0,
-      "changedFiles": 0,
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z",
+      "additions": 128,
+      "deletions": 46,
+      "changedFiles": 5,
       "labels": [
         {
-          "id": "string",
-          "name": "string",
-          "color": "string",
-          "description": "string"
+          "id": "lbl_01k2ja2000e0080000000000m1",
+          "name": "bug",
+          "color": "d73a4a",
+          "description": "Something isn't working"
         }
       ],
       "version": {
-        "number": "string",
-        "headSha": "string",
-        "baseSha": "string",
-        "createdAt": "2026-01-01T00:00:00Z"
+        "number": "3",
+        "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+        "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+        "createdAt": "2026-08-01T09:30:00Z"
       }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### Get Pull Request
 
 /v1/origin/repos///pulls/
+
+Requires scope `repository:pull_requests:read` (installation access token or user credential).
 
 Returns a single pull request, including its assigned labels.
 
@@ -6615,48 +6685,45 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "number": "string",
-  "state": "string",
+  "id": "pr_01k2ja2000e0080000000000d4",
+  "number": "17",
+  "state": "open",
   "draft": false,
   "merged": false,
-  "title": "string",
-  "body": "string",
+  "title": "Add launch telemetry",
+  "body": "Adds structured launch telemetry to the ignition path.",
   "head": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "add-telemetry",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
   },
   "base": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "main",
+    "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
   },
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "closedAt": "2026-01-01T00:00:00Z",
-  "mergedAt": "2026-01-01T00:00:00Z",
-  "mergeCommitSha": "string",
-  "additions": 0,
-  "deletions": 0,
-  "changedFiles": 0,
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "additions": 128,
+  "deletions": 46,
+  "changedFiles": 5,
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ],
   "version": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   }
 }
 ```
@@ -6664,6 +6731,8 @@ curl --request GET \
 ### Create Pull Request
 
 /v1/origin/repos///pulls
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Creates a pull request from `head` into `base`.
 
@@ -6877,9 +6946,11 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "title": "TITLE",
-  "head": "HEAD_BRANCH",
-  "base": "BASE_BRANCH"
+  "title": "Add launch telemetry",
+  "body": "Adds structured launch telemetry to the ignition path.",
+  "head": "add-telemetry",
+  "base": "main",
+  "draft": false
 }'
 ```
 
@@ -6887,48 +6958,45 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
-  "number": "string",
-  "state": "string",
+  "id": "pr_01k2ja2000e0080000000000d4",
+  "number": "17",
+  "state": "open",
   "draft": false,
   "merged": false,
-  "title": "string",
-  "body": "string",
+  "title": "Add launch telemetry",
+  "body": "Adds structured launch telemetry to the ignition path.",
   "head": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "add-telemetry",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
   },
   "base": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "main",
+    "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
   },
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "closedAt": "2026-01-01T00:00:00Z",
-  "mergedAt": "2026-01-01T00:00:00Z",
-  "mergeCommitSha": "string",
-  "additions": 0,
-  "deletions": 0,
-  "changedFiles": 0,
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "additions": 128,
+  "deletions": 46,
+  "changedFiles": 5,
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ],
   "version": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   }
 }
 ```
@@ -6936,6 +7004,8 @@ curl --request POST \
 ### Update Pull Request
 
 /v1/origin/repos///pulls/
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Updates a pull request's title, body, base branch, and/or lifecycle state.
 
@@ -7145,7 +7215,11 @@ curl --request PATCH \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "title": "TITLE"
+  "title": "Add launch telemetry",
+  "body": "Adds structured launch telemetry to the ignition path.",
+  "state": "open",
+  "draft": false,
+  "base": "main"
 }'
 ```
 
@@ -7153,48 +7227,45 @@ curl --request PATCH \
 
 ```json
 {
-  "id": "string",
-  "number": "string",
-  "state": "string",
+  "id": "pr_01k2ja2000e0080000000000d4",
+  "number": "17",
+  "state": "open",
   "draft": false,
   "merged": false,
-  "title": "string",
-  "body": "string",
+  "title": "Add launch telemetry",
+  "body": "Adds structured launch telemetry to the ignition path.",
   "head": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "add-telemetry",
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
   },
   "base": {
-    "ref": "string",
-    "sha": "string"
+    "ref": "main",
+    "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
   },
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z",
-  "closedAt": "2026-01-01T00:00:00Z",
-  "mergedAt": "2026-01-01T00:00:00Z",
-  "mergeCommitSha": "string",
-  "additions": 0,
-  "deletions": 0,
-  "changedFiles": 0,
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "additions": 128,
+  "deletions": 46,
+  "changedFiles": 5,
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ],
   "version": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   }
 }
 ```
@@ -7202,6 +7273,8 @@ curl --request PATCH \
 ### List Pull Request Comments
 
 /v1/origin/repos///pulls//comments
+
+Requires scope `repository:pull_requests:reviews:read` (installation access token or user credential).
 
 Lists every comment on a pull request in chronological order. Each comment carries its full thread: id, diff anchor, and resolution state. Group the flat response by `thread.id` without a second request.
 
@@ -7397,54 +7470,54 @@ curl --request GET \
 {
   "comments": [
     {
-      "id": "string",
+      "id": "cmt_01k2ja2000e0080000000000e5",
       "thread": {
-        "id": "string",
+        "id": "cth_01k2ja2000e0080000000000s6",
         "version": {
-          "number": "string",
-          "headSha": "string",
-          "baseSha": "string",
-          "createdAt": "2026-01-01T00:00:00Z"
+          "number": "3",
+          "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+          "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+          "createdAt": "2026-08-01T09:30:00Z"
         },
-        "path": "string",
-        "side": "left",
-        "startLine": 0,
-        "endLine": 0,
-        "resolvedAt": "2026-01-01T00:00:00Z",
-        "createdAt": "2026-01-01T00:00:00Z",
-        "updatedAt": "2026-01-01T00:00:00Z"
+        "path": "src/telemetry/retry.ts",
+        "side": "right",
+        "startLine": 42,
+        "endLine": 45,
+        "createdAt": "2026-08-01T09:30:00Z",
+        "updatedAt": "2026-08-02T14:45:00Z"
       },
-      "body": "string",
+      "body": "Should the retry budget be configurable?",
       "author": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
-      "createdAt": "2026-01-01T00:00:00Z",
-      "updatedAt": "2026-01-01T00:00:00Z"
+      "createdAt": "2026-08-01T09:30:00Z",
+      "updatedAt": "2026-08-02T14:45:00Z"
     }
   ],
   "pullRequest": {
-    "id": "string",
-    "number": "string",
+    "id": "pr_01k2ja2000e0080000000000d4",
+    "number": "17",
     "repository": {
-      "id": "string",
-      "name": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       }
     }
-  },
-  "nextPageToken": "string"
+  }
 }
 ```
 
 ### Get Pull Request Comment
 
 /v1/origin/repos///pulls/comments/
+
+Requires scope `repository:pull_requests:reviews:read` (installation access token or user credential).
 
 Returns a single pull request comment by its stable Origin id. A comment outside the authorized repository, or a pending-review comment not visible to the caller, returns `404`.
 
@@ -7580,38 +7653,39 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
+  "id": "cmt_01k2ja2000e0080000000000e5",
   "thread": {
-    "id": "string",
+    "id": "cth_01k2ja2000e0080000000000s6",
     "version": {
-      "number": "string",
-      "headSha": "string",
-      "baseSha": "string",
-      "createdAt": "2026-01-01T00:00:00Z"
+      "number": "3",
+      "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+      "createdAt": "2026-08-01T09:30:00Z"
     },
-    "path": "string",
-    "side": "left",
-    "startLine": 0,
-    "endLine": 0,
-    "resolvedAt": "2026-01-01T00:00:00Z",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z"
+    "path": "src/telemetry/retry.ts",
+    "side": "right",
+    "startLine": 42,
+    "endLine": 45,
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z"
   },
-  "body": "string",
+  "body": "Should the retry budget be configurable?",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z"
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z"
 }
 ```
 
 ### Create Pull Request Comment
 
 /v1/origin/repos///pulls//comments
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Creates a comment on an Origin pull request. The comment targets exactly one of three things: `threadId` replies to an existing thread, general-discussion and inline alike; `inline` opens a new thread anchored to the pull request version's diff; supplying neither opens a new general-discussion thread. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
 
@@ -7779,14 +7853,7 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "body": "BODY",
-  "inline": {
-    "path": "FILE_PATH",
-    "side": "right",
-    "startLine": 42,
-    "endLine": 45
-  },
-  "versionNumber": "VERSION_NUMBER"
+  "body": "Should the retry budget be configurable?"
 }'
 ```
 
@@ -7794,38 +7861,39 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
+  "id": "cmt_01k2ja2000e0080000000000e5",
   "thread": {
-    "id": "string",
+    "id": "cth_01k2ja2000e0080000000000s6",
     "version": {
-      "number": "string",
-      "headSha": "string",
-      "baseSha": "string",
-      "createdAt": "2026-01-01T00:00:00Z"
+      "number": "3",
+      "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+      "createdAt": "2026-08-01T09:30:00Z"
     },
-    "path": "string",
-    "side": "left",
-    "startLine": 0,
-    "endLine": 0,
-    "resolvedAt": "2026-01-01T00:00:00Z",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z"
+    "path": "src/telemetry/retry.ts",
+    "side": "right",
+    "startLine": 42,
+    "endLine": 45,
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z"
   },
-  "body": "string",
+  "body": "Should the retry budget be configurable?",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z"
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z"
 }
 ```
 
 ### Update Pull Request Comment
 
 /v1/origin/repos///pulls/comments/
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Updates a pull request comment by its stable Origin id.
 
@@ -7965,7 +8033,7 @@ curl --request PATCH \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "body": "BODY"
+  "body": "Should the retry budget be configurable?"
 }'
 ```
 
@@ -7973,38 +8041,39 @@ curl --request PATCH \
 
 ```json
 {
-  "id": "string",
+  "id": "cmt_01k2ja2000e0080000000000e5",
   "thread": {
-    "id": "string",
+    "id": "cth_01k2ja2000e0080000000000s6",
     "version": {
-      "number": "string",
-      "headSha": "string",
-      "baseSha": "string",
-      "createdAt": "2026-01-01T00:00:00Z"
+      "number": "3",
+      "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+      "createdAt": "2026-08-01T09:30:00Z"
     },
-    "path": "string",
-    "side": "left",
-    "startLine": 0,
-    "endLine": 0,
-    "resolvedAt": "2026-01-01T00:00:00Z",
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z"
+    "path": "src/telemetry/retry.ts",
+    "side": "right",
+    "startLine": 42,
+    "endLine": 45,
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z"
   },
-  "body": "string",
+  "body": "Should the retry budget be configurable?",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z"
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z"
 }
 ```
 
 ### Update Pull Request Thread
 
 /v1/origin/repos///pulls/threads/
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Resolves or reopens a pull request comment thread and returns the thread's updated state. Resolving an already-resolved thread, or reopening an already-open one, is a no-op.
 
@@ -8098,26 +8167,28 @@ curl --request PATCH \
 
 ```json
 {
-  "id": "string",
+  "id": "cth_01k2ja2000e0080000000000s6",
   "version": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   },
-  "path": "string",
-  "side": "left",
-  "startLine": 0,
-  "endLine": 0,
-  "resolvedAt": "2026-01-01T00:00:00Z",
-  "createdAt": "2026-01-01T00:00:00Z",
-  "updatedAt": "2026-01-01T00:00:00Z"
+  "path": "src/telemetry/retry.ts",
+  "side": "right",
+  "startLine": 42,
+  "endLine": 45,
+  "resolvedAt": "2026-08-03T10:00:00Z",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-03T10:00:00Z"
 }
 ```
 
 ### List Pull Request Commits
 
 /v1/origin/repos///pulls//commits
+
+Requires scope `repository:pull_requests:read` (installation access token or user credential).
 
 Lists the commits in a pull request.
 
@@ -8227,37 +8298,43 @@ curl --request GET \
 {
   "commits": [
     {
-      "sha": "string",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
       "commit": {
         "author": {
-          "name": "string",
-          "email": "string",
-          "date": "string"
+          "name": "Jane Doe",
+          "email": "jane@acme.dev",
+          "date": "2026-08-01T09:30:00Z"
         },
         "committer": {
-          "name": "string",
-          "email": "string",
-          "date": "string"
+          "name": "Jane Doe",
+          "email": "jane@acme.dev",
+          "date": "2026-08-01T09:30:00Z"
         },
-        "message": "string",
+        "message": "Add launch telemetry",
         "tree": {
-          "sha": "string"
+          "sha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8"
         }
       },
       "parents": [
         {
-          "sha": "string"
+          "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
         }
-      ]
+      ],
+      "stats": {
+        "additions": 128,
+        "deletions": 46,
+        "total": 174
+      }
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### List Pull Request Files
 
 /v1/origin/repos///pulls//files
+
+Requires scope `repository:pull_requests:read` (installation access token or user credential).
 
 Lists the files changed in a pull request.
 
@@ -8335,22 +8412,22 @@ curl --request GET \
 {
   "files": [
     {
-      "filename": "string",
-      "status": "string",
-      "additions": 0,
-      "deletions": 0,
-      "changes": 0,
-      "patch": "string",
-      "previousFilename": "string"
+      "filename": "src/telemetry.ts",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 3,
+      "changes": 9,
+      "patch": "@@ -12,6 +12,9 @@\n import { ignite } from \"./ignition\";\n+import { emitLaunchTelemetry } from \"./telemetry\";\n"
     }
-  ],
-  "nextPageToken": "string"
+  ]
 }
 ```
 
 ### List Pull Request Labels
 
 /v1/origin/repos///pulls//labels
+
+Requires scope `repository:pull_requests:read` (installation access token or user credential).
 
 Lists every label assigned to a pull request, ordered by name.
 
@@ -8402,10 +8479,10 @@ curl --request GET \
 {
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ]
 }
@@ -8414,6 +8491,8 @@ curl --request GET \
 ### Set Pull Request Labels
 
 /v1/origin/repos///pulls//labels
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Replaces every label assigned to a pull request with the labels you name.
 
@@ -8450,7 +8529,7 @@ curl --request PUT \
   --header 'Content-Type: application/json' \
   --data '{
   "labels": [
-    "LABEL_NAME"
+    "bug"
   ]
 }'
 ```
@@ -8461,10 +8540,10 @@ curl --request PUT \
 {
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ]
 }
@@ -8473,6 +8552,8 @@ curl --request PUT \
 ### Add Pull Request Labels
 
 /v1/origin/repos///pulls//labels
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Adds existing repository labels to a pull request.
 
@@ -8509,7 +8590,7 @@ curl --request POST \
   --header 'Content-Type: application/json' \
   --data '{
   "labels": [
-    "LABEL_NAME"
+    "bug"
   ]
 }'
 ```
@@ -8520,10 +8601,10 @@ curl --request POST \
 {
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ]
 }
@@ -8532,6 +8613,8 @@ curl --request POST \
 ### Remove All Pull Request Labels
 
 /v1/origin/repos///pulls//labels
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Removes every label from a pull request.
 
@@ -8568,6 +8651,8 @@ curl --request DELETE \
 ### Remove Pull Request Label
 
 /v1/origin/repos///pulls//labels/
+
+Requires scope `repository:pull_requests:write` (installation access token or user credential).
 
 Removes one label from a pull request.
 
@@ -8607,10 +8692,10 @@ curl --request DELETE \
 {
   "labels": [
     {
-      "id": "string",
-      "name": "string",
-      "color": "string",
-      "description": "string"
+      "id": "lbl_01k2ja2000e0080000000000m1",
+      "name": "bug",
+      "color": "d73a4a",
+      "description": "Something isn't working"
     }
   ]
 }
@@ -8619,6 +8704,8 @@ curl --request DELETE \
 ### Merge Pull Request
 
 /v1/origin/repos///pulls//merge
+
+Requires scope `repository:contents:write` (installation access token or user credential).
 
 Merges a pull request into its base.
 
@@ -8824,61 +8911,61 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-    "expectedHeadSha": "EXPECTED_HEAD_SHA"
-  }'
+  "expectedHeadSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
+}'
 ```
 
 **Response shape:**
 
 ```json
 {
-  "mergeCommitSha": "string",
+  "mergeCommitSha": "5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d",
   "mergedPullNumbers": [
-    "string"
+    "17"
   ],
   "pullRequest": {
-    "id": "string",
-    "number": "string",
-    "state": "string",
+    "id": "pr_01k2ja2000e0080000000000d4",
+    "number": "17",
+    "state": "closed",
     "draft": false,
-    "merged": false,
-    "title": "string",
-    "body": "string",
+    "merged": true,
+    "title": "Add launch telemetry",
+    "body": "Adds structured launch telemetry to the ignition path.",
     "head": {
-      "ref": "string",
-      "sha": "string"
+      "ref": "add-telemetry",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
     },
     "base": {
-      "ref": "string",
-      "sha": "string"
+      "ref": "main",
+      "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
     },
     "author": {
       "user": {
-        "id": "string",
-        "email": "string"
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
       }
     },
-    "createdAt": "2026-01-01T00:00:00Z",
-    "updatedAt": "2026-01-01T00:00:00Z",
-    "closedAt": "2026-01-01T00:00:00Z",
-    "mergedAt": "2026-01-01T00:00:00Z",
-    "mergeCommitSha": "string",
-    "additions": 0,
-    "deletions": 0,
-    "changedFiles": 0,
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z",
+    "closedAt": "2026-08-03T10:15:00Z",
+    "mergedAt": "2026-08-03T10:15:00Z",
+    "mergeCommitSha": "5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d",
+    "additions": 128,
+    "deletions": 46,
+    "changedFiles": 5,
     "labels": [
       {
-        "id": "string",
-        "name": "string",
-        "color": "string",
-        "description": "string"
+        "id": "lbl_01k2ja2000e0080000000000m1",
+        "name": "bug",
+        "color": "d73a4a",
+        "description": "Something isn't working"
       }
     ],
     "version": {
-      "number": "string",
-      "headSha": "string",
-      "baseSha": "string",
-      "createdAt": "2026-01-01T00:00:00Z"
+      "number": "3",
+      "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+      "createdAt": "2026-08-01T09:30:00Z"
     }
   }
 }
@@ -8888,9 +8975,11 @@ curl --request POST \
 
 /v1/origin/repos///pulls//requested\_reviewers
 
+Requires scope `repository:pull_requests:reviews:read` (installation access token or user credential).
+
 Lists the users and groups whose review is currently requested on a pull request.
 
-A direct request clears when that user submits a review, and a group request clears when any current member of the group submits. Unsubmitted draft reviews leave the request pending, and requesting review again after a submission returns the reviewer to this list. Groups without a readable public identifier are omitted. Reviewers are identified by id; these responses carry no email addresses.
+A direct request clears when that user submits a review, and a group request clears when any current member of the group submits. Unsubmitted draft reviews leave the request pending, and requesting review again after a submission returns the reviewer to this list. Groups without a readable public identifier are omitted.
 
 #### Path Parameters
 
@@ -8916,6 +9005,10 @@ Users whose review is requested. Empty when none are pending.
 
 Encoded user identifier (`user_…`), the same format the organization API uses.
 
+`users[].email` string
+
+Email address of the user. Empty when the account has none.
+
 `groups` array
 
 Groups whose review is requested. Empty when none are pending.
@@ -8936,12 +9029,13 @@ curl --request GET \
 {
   "users": [
     {
-      "id": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   ],
   "groups": [
     {
-      "id": "string"
+      "id": "grp_01k2ja2000e0080000000000n2"
     }
   ]
 }
@@ -8950,6 +9044,8 @@ curl --request GET \
 ### Request Pull Request Reviewers
 
 /v1/origin/repos///pulls//requested\_reviewers
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Requests reviews from the given users and groups on a pull request, and returns the reviewers this call requested.
 
@@ -8991,6 +9087,10 @@ Users this call requested.
 
 Encoded user identifier (`user_…`), the same format the organization API uses.
 
+`users[].email` string
+
+Email address of the user. Empty when the account has none.
+
 `groups` array
 
 Groups this call requested.
@@ -9006,10 +9106,10 @@ curl --request POST \
   --header 'Content-Type: application/json' \
   --data '{
   "users": [
-    "USER_ID"
+    "user_01k2ja2000e0080000000000c3"
   ],
   "groups": [
-    "GROUP_ID"
+    "grp_01k2ja2000e0080000000000n2"
   ]
 }'
 ```
@@ -9020,12 +9120,13 @@ curl --request POST \
 {
   "users": [
     {
-      "id": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   ],
   "groups": [
     {
-      "id": "string"
+      "id": "grp_01k2ja2000e0080000000000n2"
     }
   ]
 }
@@ -9034,6 +9135,8 @@ curl --request POST \
 ### Remove Pull Request Requested Reviewers
 
 /v1/origin/repos///pulls//requested\_reviewers
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Removes requested reviews from the given users and groups on a pull request. The response body is empty.
 
@@ -9076,10 +9179,10 @@ curl --request DELETE \
   --header 'Content-Type: application/json' \
   --data '{
   "users": [
-    "USER_ID"
+    "user_01k2ja2000e0080000000000c3"
   ],
   "groups": [
-    "GROUP_ID"
+    "grp_01k2ja2000e0080000000000n2"
   ]
 }'
 ```
@@ -9093,6 +9196,8 @@ curl --request DELETE \
 ### List Pull Request Reviews
 
 /v1/origin/repos///pulls//reviews
+
+Requires scope `repository:pull_requests:reviews:read` (installation access token or user credential).
 
 Lists submitted reviews on a pull request, ordered by `submitted_at` ascending. Pending reviews are omitted.
 
@@ -9300,54 +9405,45 @@ curl --request GET \
 {
   "reviews": [
     {
-      "id": "string",
+      "id": "rev_01k2ja2000e0080000000000f6",
       "author": {
         "user": {
-          "id": "string",
-          "email": "string"
+          "id": "user_01k2ja2000e0080000000000c3",
+          "email": "jane@acme.dev"
         }
       },
       "verdict": "approve",
-      "body": "string",
-      "submittedAt": "2026-01-01T00:00:00Z",
+      "body": "Approving. The telemetry schema matches the spec.",
+      "submittedAt": "2026-08-02T15:00:00Z",
       "pullRequestVersion": {
-        "number": "string",
-        "headSha": "string",
-        "baseSha": "string",
-        "createdAt": "2026-01-01T00:00:00Z"
-      },
-      "dismissal": {
-        "dismissedBy": {
-          "user": {
-            "id": "string",
-            "email": "string"
-          }
-        },
-        "dismissedAt": "2026-01-01T00:00:00Z",
-        "message": "string"
+        "number": "3",
+        "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+        "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+        "createdAt": "2026-08-01T09:30:00Z"
       }
     }
   ],
   "pullRequest": {
-    "id": "string",
-    "number": "string",
+    "id": "pr_01k2ja2000e0080000000000d4",
+    "number": "17",
     "repository": {
-      "id": "string",
-      "name": "string",
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
       "owner": {
-        "slug": "string",
-        "id": "string",
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
         "type": "team"
       }
     }
-  },
-  "nextPageToken": "string"
+  }
 }
 ```
 
 ### Create Pull Request Review
 
 /v1/origin/repos///pulls//reviews
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Creates and submits a review on a pull request, optionally together with its line-anchored comments in one atomic request.
 
@@ -9543,24 +9639,9 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "verdict": "request_changes",
-  "body": "REVIEW_BODY",
-  "versionNumber": "VERSION_NUMBER",
-  "comments": [
-    {
-      "body": "BODY",
-      "inline": {
-        "path": "FILE_PATH",
-        "side": "right",
-        "startLine": 42,
-        "endLine": 45
-      }
-    },
-    {
-      "body": "BODY",
-      "threadId": "THREAD_ID"
-    }
-  ]
+  "verdict": "approve",
+  "body": "Approving. The telemetry schema matches the spec.",
+  "versionNumber": "3"
 }'
 ```
 
@@ -9568,31 +9649,21 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
+  "id": "rev_01k2ja2000e0080000000000f6",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
   "verdict": "approve",
-  "body": "string",
-  "submittedAt": "2026-01-01T00:00:00Z",
+  "body": "Approving. The telemetry schema matches the spec.",
+  "submittedAt": "2026-08-02T15:00:00Z",
   "pullRequestVersion": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
-  },
-  "dismissal": {
-    "dismissedBy": {
-      "user": {
-        "id": "string",
-        "email": "string"
-      }
-    },
-    "dismissedAt": "2026-01-01T00:00:00Z",
-    "message": "string"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   }
 }
 ```
@@ -9600,6 +9671,8 @@ curl --request POST \
 ### Update Pull Request Review
 
 /v1/origin/repos///pulls//reviews/
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Updates the body of a review. Only the review author can update it; other callers receive PERMISSION\_DENIED. A review that does not belong to the named pull request returns NOT\_FOUND.
 
@@ -9753,7 +9826,7 @@ curl --request PATCH \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "body": "BODY"
+  "body": "Approving. The telemetry schema matches the spec."
 }'
 ```
 
@@ -9761,31 +9834,21 @@ curl --request PATCH \
 
 ```json
 {
-  "id": "string",
+  "id": "rev_01k2ja2000e0080000000000f6",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
   "verdict": "approve",
-  "body": "string",
-  "submittedAt": "2026-01-01T00:00:00Z",
+  "body": "Approving. The telemetry schema matches the spec.",
+  "submittedAt": "2026-08-02T15:00:00Z",
   "pullRequestVersion": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
-  },
-  "dismissal": {
-    "dismissedBy": {
-      "user": {
-        "id": "string",
-        "email": "string"
-      }
-    },
-    "dismissedAt": "2026-01-01T00:00:00Z",
-    "message": "string"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   }
 }
 ```
@@ -9793,6 +9856,8 @@ curl --request PATCH \
 ### Dismiss Pull Request Review
 
 /v1/origin/repos///pulls//reviews//dismissals
+
+Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
 Dismisses a submitted review so its verdict no longer counts toward the pull request's review state. The review itself is retained and keeps appearing in ListPullRequestReviews, with `dismissal` set.
 
@@ -9950,7 +10015,7 @@ curl --request PUT \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "message": "MESSAGE"
+  "message": "Superseded by a newer review."
 }'
 ```
 
@@ -9958,31 +10023,31 @@ curl --request PUT \
 
 ```json
 {
-  "id": "string",
+  "id": "rev_01k2ja2000e0080000000000f6",
   "author": {
     "user": {
-      "id": "string",
-      "email": "string"
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
     }
   },
   "verdict": "approve",
-  "body": "string",
-  "submittedAt": "2026-01-01T00:00:00Z",
+  "body": "Approving. The telemetry schema matches the spec.",
+  "submittedAt": "2026-08-02T15:00:00Z",
   "pullRequestVersion": {
-    "number": "string",
-    "headSha": "string",
-    "baseSha": "string",
-    "createdAt": "2026-01-01T00:00:00Z"
+    "number": "3",
+    "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+    "createdAt": "2026-08-01T09:30:00Z"
   },
   "dismissal": {
     "dismissedBy": {
       "user": {
-        "id": "string",
-        "email": "string"
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
       }
     },
-    "dismissedAt": "2026-01-01T00:00:00Z",
-    "message": "string"
+    "dismissedAt": "2026-08-02T15:00:00Z",
+    "message": "Superseded by a newer review."
   }
 }
 ```
@@ -9992,6 +10057,8 @@ curl --request PUT \
 ### List Rulesets
 
 /v1/origin/repos///rulesets
+
+Requires scope `repository:rulesets:read` (installation access token or user credential).
 
 Lists every ruleset configured on a repository.
 
@@ -10145,41 +10212,40 @@ curl --request GET \
 {
   "rulesets": [
     {
-      "id": "string",
-      "name": "string",
-      "description": "string",
+      "id": "rs_01k2ja2000e0080000000000t7",
+      "name": "require-review",
+      "description": "Require an approving review before merging to main.",
       "enforcement": "active",
       "kind": "merge_branch",
       "includedRefNames": [
-        "string"
-      ],
-      "excludedRefNames": [
-        "string"
+        "refs/heads/main"
       ],
       "rules": [
         {
-          "id": "string",
-          "ruleType": "string",
-          "parameters": {}
+          "id": "rsr_01k2ja2000e0080000000000v8",
+          "ruleType": "pull_request",
+          "parameters": {
+            "requiredApprovingReviewCount": 1
+          }
         }
       ],
       "bypassActors": [
         {
-          "id": "string",
+          "id": "rsba_01k2ja2000e0080000000000w9",
           "bypassMode": "always",
           "user": {
-            "id": "string"
+            "id": "act_01k2ja2000e0080000000000x0"
           }
         }
       ]
     }
   ],
   "repository": {
-    "id": "string",
-    "name": "string",
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
     "owner": {
-      "slug": "string",
-      "id": "string",
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
       "type": "team"
     }
   }
@@ -10189,6 +10255,8 @@ curl --request GET \
 ### Create Ruleset
 
 /v1/origin/repos///rulesets
+
+Requires scope `repository:rulesets:write` (installation access token or user credential).
 
 Creates a repository ruleset.
 
@@ -10338,25 +10406,26 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "name": "RULESET_NAME",
-  "description": "RULESET_DESCRIPTION",
+  "name": "require-review",
+  "description": "Require an approving review before merging to main.",
   "enforcement": "active",
   "kind": "merge_branch",
   "includedRefNames": [
-    "~DEFAULT_BRANCH"
+    "refs/heads/main"
   ],
-  "excludedRefNames": [],
   "rules": [
     {
       "ruleType": "pull_request",
-      "parameters": {}
+      "parameters": {
+        "requiredApprovingReviewCount": 1
+      }
     }
   ],
   "bypassActors": [
     {
       "bypassMode": "always",
-      "app": {
-        "id": "APP_ID"
+      "user": {
+        "id": "act_01k2ja2000e0080000000000x0"
       }
     }
   ]
@@ -10367,30 +10436,29 @@ curl --request POST \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "description": "string",
+  "id": "rs_01k2ja2000e0080000000000t7",
+  "name": "require-review",
+  "description": "Require an approving review before merging to main.",
   "enforcement": "active",
   "kind": "merge_branch",
   "includedRefNames": [
-    "string"
-  ],
-  "excludedRefNames": [
-    "string"
+    "refs/heads/main"
   ],
   "rules": [
     {
-      "id": "string",
-      "ruleType": "string",
-      "parameters": {}
+      "id": "rsr_01k2ja2000e0080000000000v8",
+      "ruleType": "pull_request",
+      "parameters": {
+        "requiredApprovingReviewCount": 1
+      }
     }
   ],
   "bypassActors": [
     {
-      "id": "string",
+      "id": "rsba_01k2ja2000e0080000000000w9",
       "bypassMode": "always",
       "user": {
-        "id": "string"
+        "id": "act_01k2ja2000e0080000000000x0"
       }
     }
   ]
@@ -10400,6 +10468,8 @@ curl --request POST \
 ### Get Ruleset
 
 /v1/origin/repos///rulesets/
+
+Requires scope `repository:rulesets:read` (installation access token or user credential).
 
 Returns a single repository ruleset by its stable Origin ID.
 
@@ -10523,30 +10593,29 @@ curl --request GET \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "description": "string",
+  "id": "rs_01k2ja2000e0080000000000t7",
+  "name": "require-review",
+  "description": "Require an approving review before merging to main.",
   "enforcement": "active",
   "kind": "merge_branch",
   "includedRefNames": [
-    "string"
-  ],
-  "excludedRefNames": [
-    "string"
+    "refs/heads/main"
   ],
   "rules": [
     {
-      "id": "string",
-      "ruleType": "string",
-      "parameters": {}
+      "id": "rsr_01k2ja2000e0080000000000v8",
+      "ruleType": "pull_request",
+      "parameters": {
+        "requiredApprovingReviewCount": 1
+      }
     }
   ],
   "bypassActors": [
     {
-      "id": "string",
+      "id": "rsba_01k2ja2000e0080000000000w9",
       "bypassMode": "always",
       "user": {
-        "id": "string"
+        "id": "act_01k2ja2000e0080000000000x0"
       }
     }
   ]
@@ -10556,6 +10625,8 @@ curl --request GET \
 ### Update Ruleset
 
 /v1/origin/repos///rulesets/
+
+Requires scope `repository:rulesets:write` (installation access token or user credential).
 
 Updates an existing repository ruleset.
 
@@ -10709,25 +10780,26 @@ curl --request PUT \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "name": "RULESET_NAME",
-  "description": "RULESET_DESCRIPTION",
+  "name": "require-review",
+  "description": "Require an approving review before merging to main.",
   "enforcement": "active",
   "kind": "merge_branch",
   "includedRefNames": [
-    "~DEFAULT_BRANCH"
+    "refs/heads/main"
   ],
-  "excludedRefNames": [],
   "rules": [
     {
       "ruleType": "pull_request",
-      "parameters": {}
+      "parameters": {
+        "requiredApprovingReviewCount": 1
+      }
     }
   ],
   "bypassActors": [
     {
       "bypassMode": "always",
-      "app": {
-        "id": "APP_ID"
+      "user": {
+        "id": "act_01k2ja2000e0080000000000x0"
       }
     }
   ]
@@ -10738,30 +10810,29 @@ curl --request PUT \
 
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "description": "string",
+  "id": "rs_01k2ja2000e0080000000000t7",
+  "name": "require-review",
+  "description": "Require an approving review before merging to main.",
   "enforcement": "active",
   "kind": "merge_branch",
   "includedRefNames": [
-    "string"
-  ],
-  "excludedRefNames": [
-    "string"
+    "refs/heads/main"
   ],
   "rules": [
     {
-      "id": "string",
-      "ruleType": "string",
-      "parameters": {}
+      "id": "rsr_01k2ja2000e0080000000000v8",
+      "ruleType": "pull_request",
+      "parameters": {
+        "requiredApprovingReviewCount": 1
+      }
     }
   ],
   "bypassActors": [
     {
-      "id": "string",
+      "id": "rsba_01k2ja2000e0080000000000w9",
       "bypassMode": "always",
       "user": {
-        "id": "string"
+        "id": "act_01k2ja2000e0080000000000x0"
       }
     }
   ]
@@ -10771,6 +10842,8 @@ curl --request PUT \
 ### Delete Ruleset
 
 /v1/origin/repos///rulesets/
+
+Requires scope `repository:rulesets:write` (installation access token or user credential).
 
 Deletes a repository ruleset by its stable Origin ID. The response body is empty.
 
