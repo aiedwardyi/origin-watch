@@ -1948,7 +1948,10 @@ paths:
         get:
             tags:
                 - OriginService
-            description: Lists check runs belonging to a suite. Paginated.
+            description: |-
+                Lists a suite's current check runs. When a run key has been reported
+                 more than once within the suite, only the latest attempt for that key is
+                 returned; superseded attempts are omitted. Paginated.
             operationId: OriginService_ListCheckRunsForSuite
             parameters:
                 - name: ownerSlug
@@ -2285,8 +2288,9 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Lists every check run reported against a commit, across all suites.
-                 Paginated.
+                Lists a commit's current check runs across all suites: only runs
+                 belonging to each suite's latest attempt, and within each suite only the
+                 latest attempt per run key. Superseded attempts are omitted. Paginated.
             operationId: OriginService_ListCheckRunsForCommit
             parameters:
                 - name: ownerSlug
@@ -2411,8 +2415,10 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Lists check suites reported against a commit. Returns suite metadata
-                 only (no embedded runs). Paginated.
+                Lists check suites reported against a commit. Returns only the latest
+                 attempt of each suite (per reporting actor and suite key); superseded
+                 attempts are omitted. Returns suite metadata only (no embedded runs).
+                 Paginated.
             operationId: OriginService_ListCheckSuitesForCommit
             parameters:
                 - name: ownerSlug
@@ -5313,6 +5319,12 @@ paths:
                                     allOf:
                                         - $ref: '#/components/schemas/InlineCommentAnchor'
                                     description: Anchor for a new inline thread.
+                                file:
+                                    allOf:
+                                        - $ref: '#/components/schemas/FileCommentAnchor'
+                                    description: |-
+                                        Anchor for a new file-level thread; the side is derived from the
+                                         file's change kind.
                                 versionNumber:
                                     type: string
                                     description: |-
@@ -5323,6 +5335,12 @@ paths:
                             createPullRequestComment:
                                 value:
                                     body: Should the retry budget be configurable?
+                            createPullRequestCommentFile:
+                                value:
+                                    body: This module needs a design doc link.
+                                    file:
+                                        path: src/telemetry/retry.ts
+                                    versionNumber: "3"
                             createPullRequestCommentInline:
                                 value:
                                     body: Should the retry budget be configurable?
@@ -8903,6 +8921,12 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/InlineCommentAnchor'
                     description: Anchor for a new inline thread.
+                file:
+                    allOf:
+                        - $ref: '#/components/schemas/FileCommentAnchor'
+                    description: |-
+                        Anchor for a new file-level thread; the side is derived from the
+                         file's change kind.
                 versionNumber:
                     type: string
                     description: |-
@@ -9100,6 +9124,23 @@ components:
                     description: |-
                         Reason recorded with the dismissal. Must contain a non-whitespace
                          character; INVALID_ARGUMENT otherwise.
+        FileCommentAnchor:
+            required:
+                - path
+            type: object
+            properties:
+                path:
+                    type: string
+                    description: |-
+                        File path in the pull request version's diff: the deleted path for
+                         deletions, the head path otherwise (a renamed file's pre-rename source
+                         path is rejected). Paths outside the diff fail with INVALID_ARGUMENT;
+                         there is no fallback to a general-discussion comment.
+            description: |-
+                Anchor for a new file-level comment thread on the whole file in the pull
+                 request version's diff. The side is derived from the file's change kind,
+                 matching the review UI: the base version for deleted files, the head
+                 version otherwise. It comes back on the thread's `side` field.
         GetAppInstallationRequest:
             required:
                 - installationId
@@ -9487,8 +9528,10 @@ components:
                          equal to `start_line`. Omit for a single-line anchor.
                     format: uint32
             description: |-
-                Diff anchor for a new inline comment thread. `path`, `side`, and
-                 `start_line` are all required; `end_line` extends the anchor to a range.
+                Diff anchor for a new line-anchored comment thread on a file in the pull
+                 request version's diff. `start_line` anchors to a line and `end_line`
+                 extends it to a range; for a comment on the whole file, use
+                 `FileCommentAnchor` instead.
         InstallationAccessToken:
             type: object
             properties:
@@ -10335,6 +10378,12 @@ components:
                     type: string
                 slug:
                     type: string
+                displayName:
+                    type: string
+                    description: |-
+                        The app's registered display name, never empty when present. Omitted on
+                         payloads whose app could not be resolved and on the first-party Cursor
+                         facade actor.
         OriginGroup:
             type: object
             properties:
@@ -10355,6 +10404,21 @@ components:
                     type: string
                 email:
                     type: string
+                displayName:
+                    type: string
+                    description: |-
+                        Human-readable display name: the account's first and last name, each
+                         trimmed, joined with a space — exactly the name the product UI renders.
+                         Omitted when the account has no name; never synthesized from the email,
+                         the id, or any other field. May also be absent on webhook payloads whose
+                         actor could not be resolved.
+                handle:
+                    type: string
+                    description: |-
+                        The user's claimed profile handle (the identity behind cursor.com
+                         /@handle), without the @ prefix. Present only while the user's profile
+                         is publicly visible; omitted for users without a claimed handle and for
+                         non-public profiles.
         Owner:
             type: object
             properties:
@@ -11119,12 +11183,19 @@ components:
                     description: |-
                         Existing thread id to reply to (general-discussion and inline threads
                          alike). The reply stays hidden until the review publishes.
+                file:
+                    allOf:
+                        - $ref: '#/components/schemas/FileCommentAnchor'
+                    description: |-
+                        Anchor for a new file-level thread; the side is derived from the
+                         file's change kind.
             description: |-
                 One comment filed with a review via `CreatePullRequestReview`. Targets the
                  same shapes as `CreatePullRequestComment`: provide `thread_id` to reply to
-                 an existing thread, `inline` to open a new thread on the reviewed
-                 version's diff, or neither to open a new general-discussion thread. Every
-                 comment publishes with the review.
+                 an existing thread, `inline` to open a new line-anchored thread on the
+                 reviewed version's diff, `file` to open a new file-level thread, or
+                 neither to open a new general-discussion thread. Every comment publishes
+                 with the review.
         Ruleset:
             type: object
             properties:
@@ -11621,6 +11692,11 @@ components:
                     type: string
                 slug:
                     type: string
+                displayName:
+                    type: string
+                    description: |-
+                        The app's registered display name, never empty when present. Omitted
+                         when enqueue-time hydration could not resolve the app.
         WebhookDelivery:
             type: object
             properties:

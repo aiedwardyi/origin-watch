@@ -127,7 +127,8 @@ Claims:
   "jti": "RECEIPT_UUID",
   "installedBy": {
     "id": "user_01...",
-    "email": "installer@example.com"
+    "email": "installer@example.com",
+    "displayName": "Jane Doe"
   },
   "state": "ORIGINAL_VALUE"
 }
@@ -135,7 +136,7 @@ Claims:
 
 - `aud` is your app ID and `sub` is the installation ID to use when minting installation access tokens.
 - `namespace_id` is the stable ID of the namespace the app was installed into.
-- `installedBy` identifies the user who performed this install or re-consent. It describes the current action, so on a re-consent it can differ from the durable `installedBy` on [Get App Installation](https://cursor.com/docs/api/origin/llms-full.txt#get-app-installation).
+- `installedBy` identifies the user who performed this install or re-consent. It describes the current action, so on a re-consent it can differ from the durable `installedBy` on [Get App Installation](https://cursor.com/docs/api/origin/llms-full.txt#get-app-installation). It carries `displayName` when the account has a name, and never carries `handle`; read the handle from a REST response or a webhook payload instead.
 - Receipts expire five minutes after issuance. `jti` is unique per receipt.
 - `state` is present only when the install URL carried a non-empty `state`, and echoes that value. Match it against the anti-forgery value you generated before redirecting.
 
@@ -318,6 +319,8 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 | `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                                                                  |
 | `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                                                                 |
 | `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                                                                           |
+
+Requesting a `:write` scope also grants the matching `:read` scope, so `repository:labels:write` covers `repository:labels:read` and you do not have to list both. The reverse does not hold: a read scope never grants writes.
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
 
@@ -542,11 +545,11 @@ Origin does not deliver `repository.pushed` for a repository it mirrors from Git
 - Pull request lifecycle events contain a `pullRequest` snapshot and `repository` reference. Route on `event.type`; there is no separate action field. The snapshot omits the pull request's assigned `labels`; read them from [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) or [List Pull Requests](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-requests).
 - Comment events contain a `pullRequest` reference and the affected `comment`. A comment that opened its thread carries the thread's anchor inline: `comment.thread` holds the filed-against `version`, `path`, `side`, `startLine`, and `endLine`, so a receiver can materialize the thread without a follow-up read. A reply carries `comment.thread.id` only. Resolution state is not part of the event; read it from [Get Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-comment) or [List Pull Request Comments](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-comments). Comments filed with a review stay silent until the review submits, and then each one emits its own event.
 - Review events contain a `pullRequest` reference and the affected `review`. Both `pull_request.review.submitted` and `pull_request.review.dismissed` use this shape; on a dismissal the review carries `review.dismissal` with the dismissing actor, timestamp, and message. A review superseded by a newer decision carries a server-generated message.
-- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user` carries the encoded user ID (`user_…`, the same format as the organization API) and the account `email`, and `reviewer.group.id` is the group public ID (`grp_…`). Read the current pending set with [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers), and change it with [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers) or [Remove Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#remove-pull-request-requested-reviewers).
+- Reviewer events contain a `pullRequest` reference, a `reviewer`, how the request was created, an optional actor, and a timestamp. Exactly one of `reviewer.user` or `reviewer.group` is present: `reviewer.user` carries the encoded user ID (`user_…`, the same format as the organization API), the account `email`, and the optional `displayName` and `handle`, and `reviewer.group.id` is the group public ID (`grp_…`). Read the current pending set with [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers), and change it with [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers) or [Remove Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#remove-pull-request-requested-reviewers).
 - Check events contain `repository`, `checkSuite`, `checkRun`, and `actor`.
 - Push events contain one repository snapshot and up to 100 `refUpdates`. `refUpdatesCount` is authoritative. Optional tip metadata is best effort and does not provide a complete commits array. Merging a pull request advances the base ref, and that update is delivered as a push event; because Origin itself performs the merge push, the event names no pusher.
 - Repository events split by shape. `repository.created` and `repository.metadata.updated` carry a full `repository` snapshot with no delta and no updating actor, so compare successive snapshots or refetch the repository to see what moved. `repository.deleted` carries a `repository` reference and `deletedAt` instead of a snapshot, because a deleted repository no longer resolves through the API.
-- Installation events contain the installation snapshot and app identity. The snapshot carries `installedBy`, the user who originally installed the app, on all five `installation.*` events. Selected repository arrays may be capped at 5,000; `repositoriesCount` is authoritative.
+- Installation events contain the installation snapshot and app identity. The `app` object carries `id`, `slug`, and the app's registered `displayName`, which is omitted when the app cannot be resolved at enqueue time. The snapshot carries `installedBy`, the user who originally installed the app, on all five `installation.*` events. Selected repository arrays may be capped at 5,000; `repositoriesCount` is authoritative.
 
 ### Recovery
 
@@ -848,6 +851,14 @@ Public identifier for the user, prefixed `user_`.
 
 Email address of the user.
 
+`installations[].installedBy.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`installations[].installedBy.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `nextPageToken` string
 
 Opaque cursor for the next page; empty when there are no more pages.
@@ -952,6 +963,14 @@ Public identifier for the user, prefixed `user_`.
 `installedBy.email` string
 
 Email address of the user.
+
+`installedBy.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`installedBy.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
 
 ```bash
 curl --request GET \
@@ -2230,6 +2249,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkSuite.actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkSuite.actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkSuite.actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -2241,6 +2268,10 @@ Public identifier for the app.
 `checkSuite.actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkSuite.actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkSuite.actor.serviceAccount` object
 
@@ -2358,6 +2389,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkRun.actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkRun.actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkRun.actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -2369,6 +2408,10 @@ Public identifier for the app.
 `checkRun.actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkRun.actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkRun.actor.serviceAccount` object
 
@@ -2688,6 +2731,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkSuite.actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkSuite.actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkSuite.actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -2699,6 +2750,10 @@ Public identifier for the app.
 `checkSuite.actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkSuite.actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkSuite.actor.serviceAccount` object
 
@@ -2816,6 +2871,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkRuns[].actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkRuns[].actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkRuns[].actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -2827,6 +2890,10 @@ Public identifier for the app.
 `checkRuns[].actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkRuns[].actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkRuns[].actor.serviceAccount` object
 
@@ -3090,6 +3157,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -3101,6 +3176,10 @@ Public identifier for the app.
 `actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `actor.serviceAccount` object
 
@@ -3596,6 +3675,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -3607,6 +3694,10 @@ Public identifier for the app.
 `actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `actor.serviceAccount` object
 
@@ -3658,7 +3749,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user credential).
 
-Lists check runs belonging to a suite. Paginated.
+Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
 
 #### Path Parameters
 
@@ -3794,6 +3885,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkRuns[].actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkRuns[].actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkRuns[].actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -3805,6 +3904,10 @@ Public identifier for the app.
 `checkRuns[].actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkRuns[].actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkRuns[].actor.serviceAccount` object
 
@@ -3897,7 +4000,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user credential).
 
-Lists every check run reported against a commit, across all suites. Paginated.
+Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
 
 #### Path Parameters
 
@@ -4033,6 +4136,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkRuns[].actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkRuns[].actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkRuns[].actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -4044,6 +4155,10 @@ Public identifier for the app.
 `checkRuns[].actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkRuns[].actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkRuns[].actor.serviceAccount` object
 
@@ -4136,7 +4251,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user credential).
 
-Lists check suites reported against a commit. Returns suite metadata only (no embedded runs). Paginated.
+Lists check suites reported against a commit. Returns only the latest attempt of each suite, per reporting actor and suite key; superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Suite](https://cursor.com/docs/api/origin/llms-full.txt#get-check-suite). Returns suite metadata only (no embedded runs). Paginated.
 
 #### Path Parameters
 
@@ -4244,6 +4359,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`checkSuites[].actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`checkSuites[].actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `checkSuites[].actor.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -4255,6 +4378,10 @@ Public identifier for the app.
 `checkSuites[].actor.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`checkSuites[].actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `checkSuites[].actor.serviceAccount` object
 
@@ -6338,6 +6465,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`pullRequests[].author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`pullRequests[].author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `pullRequests[].author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -6349,6 +6484,10 @@ Public identifier for the app.
 `pullRequests[].author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`pullRequests[].author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `pullRequests[].author.serviceAccount` object
 
@@ -6583,6 +6722,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -6594,6 +6741,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -6848,6 +6999,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -6859,6 +7018,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -7117,6 +7280,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -7128,6 +7299,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -7386,6 +7561,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`comments[].author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`comments[].author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `comments[].author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -7397,6 +7580,10 @@ Public identifier for the app.
 `comments[].author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`comments[].author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `comments[].author.serviceAccount` object
 
@@ -7615,6 +7802,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -7626,6 +7821,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -7687,9 +7886,11 @@ curl --request GET \
 
 Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
-Creates a comment on an Origin pull request. The comment targets exactly one of three things: `threadId` replies to an existing thread, general-discussion and inline alike; `inline` opens a new thread anchored to the pull request version's diff; supplying neither opens a new general-discussion thread. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
+Creates a comment on an Origin pull request. The comment targets exactly one of four things: `threadId` replies to an existing thread, general-discussion and inline alike; `inline` opens a new thread anchored to a line range in the pull request version's diff; `file` opens a new thread on a whole file in that diff; supplying none of them opens a new general-discussion thread. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
 
 An `inline` anchor must reference the version's diff. The `path` must be part of that diff, and the `side` must have content there, so anchoring `left` on an added file or `right` on a deleted file is rejected with `InvalidArgument` (HTTP 400). Any line of a changed file anchors; the range is not restricted to the diff's hunks. Origin never falls back to a general-discussion comment when an anchor is invalid.
+
+A `file` anchor carries the path alone. Origin derives the side from the file's change kind, the base version for a deleted file and the head version otherwise, and returns it on `thread.side`. Send the deleted path for a deletion and the head path for every other change. A path outside the diff is rejected with `InvalidArgument` (HTTP 400), as is a renamed file's pre-rename source path.
 
 #### Path Parameters
 
@@ -7732,6 +7933,14 @@ First 1-based line of the anchored range in the `side` version of the file.
 `inline.endLine` integer
 
 Inclusive last line of the anchored range. Must be greater than or equal to `startLine`. Omit for a single-line anchor.
+
+`file` object
+
+Anchor for a new file-level thread on a whole file in the pull request version's diff. Cannot be combined with `threadId` or `inline`.
+
+`file.path` string Required
+
+File path in the pull request version's diff: the deleted path for a deletion, the head path otherwise.
 
 `versionNumber` string
 
@@ -7819,6 +8028,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -7830,6 +8047,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -7999,6 +8220,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -8010,6 +8239,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -8813,6 +9046,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`pullRequest.author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`pullRequest.author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `pullRequest.author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -8824,6 +9065,10 @@ Public identifier for the app.
 `pullRequest.author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`pullRequest.author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `pullRequest.author.serviceAccount` object
 
@@ -9009,6 +9254,14 @@ Encoded user identifier (`user_…`), the same format the organization API uses.
 
 Email address of the user. Empty when the account has none.
 
+`users[].displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`users[].handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `groups` array
 
 Groups whose review is requested. Empty when none are pending.
@@ -9090,6 +9343,14 @@ Encoded user identifier (`user_…`), the same format the organization API uses.
 `users[].email` string
 
 Email address of the user. Empty when the account has none.
+
+`users[].displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`users[].handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
 
 `groups` array
 
@@ -9249,6 +9510,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`reviews[].author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`reviews[].author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `reviews[].author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9260,6 +9529,10 @@ Public identifier for the app.
 `reviews[].author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`reviews[].author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `reviews[].author.serviceAccount` object
 
@@ -9321,6 +9594,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`reviews[].dismissal.dismissedBy.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`reviews[].dismissal.dismissedBy.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `reviews[].dismissal.dismissedBy.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9332,6 +9613,10 @@ Public identifier for the app.
 `reviews[].dismissal.dismissedBy.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`reviews[].dismissal.dismissedBy.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `reviews[].dismissal.dismissedBy.serviceAccount` object
 
@@ -9445,7 +9730,7 @@ curl --request GET \
 
 Requires scope `repository:pull_requests:reviews:write` (installation access token or user credential).
 
-Creates and submits a review on a pull request, optionally together with its line-anchored comments in one atomic request.
+Creates and submits a review on a pull request, optionally together with its comments in one atomic request. Each comment takes the same targets [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment) takes: `comments[].inline` for a line range, `comments[].file` for a whole file, `comments[].threadId` for a reply, and none of them for general discussion.
 
 The review is submitted immediately. A new `approve` or `request_changes` review supersedes the caller's prior live decision review on the same pull request, which is dismissed. Pull request authors cannot `approve` their own pull request. Fails with FAILED\_PRECONDITION while the caller has an unsubmitted draft review on the pull request.
 
@@ -9509,7 +9794,15 @@ Inclusive last line of the anchored range. Must be greater than or equal to `sta
 
 `comments[].threadId` string
 
-Existing thread id on this pull request to reply to. The reply stays hidden until the review publishes. Omit both `comments[].inline` and this field to open a new general-discussion thread.
+Existing thread id on this pull request to reply to. The reply stays hidden until the review publishes. Omit `comments[].inline`, `comments[].file`, and this field to open a new general-discussion thread.
+
+`comments[].file` object
+
+Anchor for a new file-level thread on a whole file in the reviewed version's diff. Same shape, side derivation, and validation as `file` on [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment). Cannot be combined with `comments[].inline` or `comments[].threadId`.
+
+`comments[].file.path` string Required
+
+File path in the reviewed version's diff: the deleted path for a deletion, the head path otherwise.
 
 #### Response Fields
 
@@ -9533,6 +9826,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9544,6 +9845,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -9605,6 +9910,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`dismissal.dismissedBy.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`dismissal.dismissedBy.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `dismissal.dismissedBy.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9616,6 +9929,10 @@ Public identifier for the app.
 `dismissal.dismissedBy.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`dismissal.dismissedBy.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `dismissal.dismissedBy.serviceAccount` object
 
@@ -9720,6 +10037,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9731,6 +10056,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -9792,6 +10121,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`dismissal.dismissedBy.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`dismissal.dismissedBy.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `dismissal.dismissedBy.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9803,6 +10140,10 @@ Public identifier for the app.
 `dismissal.dismissedBy.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`dismissal.dismissedBy.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `dismissal.dismissedBy.serviceAccount` object
 
@@ -9909,6 +10250,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`author.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`author.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `author.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9920,6 +10269,10 @@ Public identifier for the app.
 `author.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`author.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `author.serviceAccount` object
 
@@ -9981,6 +10334,14 @@ Public identifier for the user.
 
 Email address of the user. Always set when the user variant is present.
 
+`dismissal.dismissedBy.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`dismissal.dismissedBy.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
 `dismissal.dismissedBy.app` object
 
 App variant of the actor. Set when an app performed the action.
@@ -9992,6 +10353,10 @@ Public identifier for the app.
 `dismissal.dismissedBy.app.slug` string
 
 URL-friendly name of the app. Always set when the app variant is present.
+
+`dismissal.dismissedBy.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
 
 `dismissal.dismissedBy.serviceAccount` object
 

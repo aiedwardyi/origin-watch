@@ -2,6 +2,9 @@
 
 One line per changed source per run, newest first. Each line links the full report under `changes/`.
 
+## 2026-09-03 - api-changelog changed (+6/-0 lines) - [report](changes/2026-09-03T043305Z-api-changelog.md)
+## 2026-09-03 - api-reference changed (+375/-10 lines) - [report](changes/2026-09-03T043305Z-api-reference.md)
+## 2026-09-03 - openapi changed (+86/-10 lines) - [report](changes/2026-09-03T043305Z-openapi.md)
 ## 2026-09-02 - api-changelog changed (+7/-0 lines) - [report](changes/2026-09-02T043254Z-api-changelog.md)
 ## 2026-09-02 - api-reference changed (+1844/-1771 lines) - [report](changes/2026-09-02T043254Z-api-reference.md)
 ## 2026-09-02 - cli-commands changed (+1/-1 lines) - [report](changes/2026-09-02T043254Z-cli-commands.md)
