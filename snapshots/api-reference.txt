@@ -324,7 +324,7 @@ Requesting a `:write` scope also grants the matching `:read` scope, so `reposito
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
 
-The table covers the scopes an app requests at installation. To look up the scope a single operation requires, read its `x-origin-scopes` extension in the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml). That extension covers every operation, including the `app`, `installation`, and `namespace` scopes that come with the credential itself rather than from an installation grant.
+The table covers the scopes an app requests at installation. To look up the scope a single operation requires, read its `x-origin-scopes` extension in the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml). That extension covers every operation, including the `app`, `installation`, and `namespace` scopes that come with the credential itself rather than from an installation grant. An operation whose scopes all come with the credential marks its extension `ambient: true`: there is nothing to request for it, and presenting the right credential is enough.
 
 ### Mirrored repositories
 
@@ -711,7 +711,7 @@ curl --request GET \
 
 /v1/origin/app
 
-Requires scope `app:metadata:read` (app JWT).
+Requires no scope (app JWT).
 
 Returns metadata for the authenticated app.
 
@@ -779,7 +779,7 @@ curl --request GET \
 
 /v1/origin/app/installations
 
-Requires scope `app:metadata:read` (app JWT).
+Requires no scope (app JWT).
 
 Lists installations for the authenticated app.
 
@@ -898,7 +898,7 @@ curl --request GET \
 
 /v1/origin/app/installations/
 
-Requires scope `app:metadata:read` (app JWT).
+Requires no scope (app JWT).
 
 Returns a single installation for the authenticated app.
 
@@ -1003,7 +1003,7 @@ curl --request GET \
 
 /v1/origin/app/installations/
 
-Requires scope `app:metadata:write` (app JWT).
+Requires no scope (app JWT).
 
 Deletes an installation that belongs to the authenticated app and prevents new installation tokens from being minted. Already-issued short-lived tokens may remain valid until they expire (at most 15 minutes). The response body is empty.
 
@@ -1033,7 +1033,7 @@ curl --request DELETE \
 
 /v1/origin/app/installations//access\_tokens
 
-Requires scope `app:metadata:read` (app JWT).
+Requires no scope (app JWT).
 
 Creates an installation access token for the authenticated app.
 
@@ -1096,7 +1096,7 @@ curl --request POST \
 
 /v1/origin/installation/repos
 
-Requires scope `installation:metadata:read` (installation access token).
+Requires no scope (installation access token).
 
 Lists repositories accessible to the authenticated app installation.
 
@@ -1213,7 +1213,7 @@ curl --request GET \
 
 /v1/origin/app/webhook/deliveries
 
-Requires scope `app:webhook_deliveries:read` (app JWT).
+Requires no scope (app JWT).
 
 Lists webhook deliveries for the authenticated app, newest first.
 
@@ -1383,7 +1383,7 @@ curl --request GET \
 
 /v1/origin/app/webhook/deliveries:batchRedeliver
 
-Requires scope `app:webhook_deliveries:write` (app JWT).
+Requires no scope (app JWT).
 
 Asks Origin to send deliveries again.
 
@@ -1438,7 +1438,7 @@ curl --request POST \
 
 /v1/origin/app/webhook/pings
 
-Requires scope `app:webhook_deliveries:write` (app JWT).
+Requires no scope (app JWT).
 
 Sends a test delivery to the authenticated app's webhook URL and reports what the receiver answered.
 
@@ -4000,7 +4000,9 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user credential).
 
-Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
+Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
+
+Filters apply to the collapsed set, so a run matches on its latest attempt's status and a filter never resurfaces a superseded attempt. Page tokens embed the filters they were minted under, so a token replayed under different filters is rejected; restart pagination when a filter changes.
 
 #### Path Parameters
 
@@ -4024,7 +4026,15 @@ Max check runs to return. Defaults to 30 when unset or 0. Values above 100 are c
 
 `pageToken` string
 
-Opaque cursor from a previous response's `next_page_token`. Empty for the first page. Encodes the last-seen check-run id scoped to this commit, so `page_size` on a follow-up request is ignored when a token is supplied.
+Opaque cursor from a previous response's `next_page_token`. Empty for the first page. Encodes the last-seen check-run id scoped to this commit and to the filters below, so `page_size` on a follow-up request is ignored when a token is supplied, and reusing a token under different filters returns `InvalidArgument` (HTTP 400).
+
+`checkName` string
+
+Optional exact check-run name filter, matched against `checkRuns[].name`. Omit to list runs under any name.
+
+`status` string
+
+Optional status filter. Allowed values: `queued`, `in_progress`, `completed`. Any other value returns `InvalidArgument` (HTTP 400). Omit to list runs in any status.
 
 #### Response Fields
 
@@ -7451,7 +7461,9 @@ curl --request PATCH \
 
 Requires scope `repository:pull_requests:reviews:read` (installation access token or user credential).
 
-Lists every comment on a pull request in chronological order. Each comment carries its full thread: id, diff anchor, and resolution state. Group the flat response by `thread.id` without a second request.
+Lists every comment on a pull request in chronological order, optionally bounded to a creation-time window. Each comment carries its full thread: id, diff anchor, and resolution state. Group the flat response by `thread.id` without a second request.
+
+Page tokens embed the bounds they were minted under, so a token replayed under a different `since` or `until` is rejected; restart pagination when a bound changes.
 
 #### Path Parameters
 
@@ -7474,6 +7486,14 @@ Maximum comments to return. Defaults to 30; maximum 100.
 `pageToken` string
 
 Opaque token from the preceding page.
+
+`since` string
+
+Optional inclusive lower bound on comment creation time, as an RFC 3339 timestamp such as `2026-08-01T00:00:00Z`. Returns only comments created at or after that instant. A malformed timestamp returns `InvalidArgument` (HTTP 400).
+
+`until` string
+
+Optional inclusive upper bound on comment creation time, in the same RFC 3339 format as `since`. Returns only comments created at or before that instant. A malformed timestamp returns `InvalidArgument` (HTTP 400).
 
 #### Response Fields
 

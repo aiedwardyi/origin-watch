@@ -71,6 +71,7 @@ paths:
                     - app
                 scopes:
                     - app:metadata:read
+                ambient: true
     /v1/origin/app/installations:
         get:
             tags:
@@ -151,6 +152,7 @@ paths:
                     - app
                 scopes:
                     - app:metadata:read
+                ambient: true
     /v1/origin/app/installations/{installationId}:
         get:
             tags:
@@ -227,6 +229,7 @@ paths:
                     - app
                 scopes:
                     - app:metadata:read
+                ambient: true
         delete:
             tags:
                 - OriginService
@@ -286,6 +289,7 @@ paths:
                     - app
                 scopes:
                     - app:metadata:write
+                ambient: true
     /v1/origin/app/installations/{installationId}/access_tokens:
         post:
             tags:
@@ -391,6 +395,7 @@ paths:
                     - app
                 scopes:
                     - app:metadata:read
+                ambient: true
     /v1/origin/app/webhook/deliveries:
         get:
             tags:
@@ -516,6 +521,7 @@ paths:
                     - app
                 scopes:
                     - app:webhook_deliveries:read
+                ambient: true
     /v1/origin/app/webhook/deliveries:batchRedeliver:
         post:
             tags:
@@ -590,6 +596,7 @@ paths:
                     - app
                 scopes:
                     - app:webhook_deliveries:write
+                ambient: true
     /v1/origin/app/webhook/pings:
         post:
             tags:
@@ -663,6 +670,7 @@ paths:
                     - app
                 scopes:
                     - app:webhook_deliveries:write
+                ambient: true
     /v1/origin/installation/repos:
         get:
             tags:
@@ -748,6 +756,7 @@ paths:
                     - installation
                 scopes:
                     - installation:metadata:read
+                ambient: true
     /v1/origin/rate_limit:
         get:
             tags:
@@ -2290,7 +2299,9 @@ paths:
             description: |-
                 Lists a commit's current check runs across all suites: only runs
                  belonging to each suite's latest attempt, and within each suite only the
-                 latest attempt per run key. Superseded attempts are omitted. Paginated.
+                 latest attempt per run key. Superseded attempts are omitted. Optionally
+                 filtered by check name and status; filters apply to the collapsed set.
+                 Paginated.
             operationId: OriginService_ListCheckRunsForCommit
             parameters:
                 - name: ownerSlug
@@ -2323,8 +2334,22 @@ paths:
                   in: query
                   description: |-
                     Opaque cursor from a previous response's `next_page_token`. Empty for the
-                     first page. Encodes the last-seen check-run id scoped to this commit, so
-                     `page_size` on a follow-up request is ignored when a token is supplied.
+                     first page. Encodes the last-seen check-run id scoped to this commit and
+                     the filters below, so `page_size` on a follow-up request is ignored when
+                     a token is supplied and reusing a token under different filters is
+                     rejected with INVALID_ARGUMENT.
+                  schema:
+                    type: string
+                - name: checkName
+                  in: query
+                  description: Optional exact check-run name filter (the check run's `name`).
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  description: |-
+                    Optional status filter: `queued`, `in_progress`, or `completed`. Any
+                     other value is rejected with INVALID_ARGUMENT.
                   schema:
                     type: string
             responses:
@@ -5154,9 +5179,10 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Lists every comment on a pull request in chronological order. Each
-                 comment includes its thread reference — id, diff anchor, and resolution
-                 state — so clients can group the flat response into threads.
+                Lists every comment on a pull request in chronological order, optionally
+                 bounded to a creation-time window. Each comment includes its thread
+                 reference — id, diff anchor, and resolution state — so clients can group
+                 the flat response into threads.
             operationId: OriginService_ListPullRequestComments
             parameters:
                 - name: ownerSlug
@@ -5185,6 +5211,24 @@ paths:
                 - name: pageToken
                   in: query
                   description: Opaque token from the preceding page.
+                  schema:
+                    type: string
+                - name: since
+                  in: query
+                  description: |-
+                    Optional inclusive RFC 3339 lower bound on comment creation time, e.g.
+                     `2026-08-01T00:00:00Z`, matching the list's chronological order. A
+                     malformed timestamp is rejected with INVALID_ARGUMENT. Page tokens embed
+                     the bound; reusing a token under a different `since` is rejected.
+                  schema:
+                    type: string
+                - name: until
+                  in: query
+                  description: |-
+                    Optional inclusive RFC 3339 upper bound on comment creation time, e.g.
+                     `2026-08-31T23:59:59Z`. A malformed timestamp is rejected with
+                     INVALID_ARGUMENT. Page tokens embed the bound; reusing a token under a
+                     different `until` is rejected.
                   schema:
                     type: string
             responses:
@@ -9751,8 +9795,18 @@ components:
                     type: string
                     description: |-
                         Opaque cursor from a previous response's `next_page_token`. Empty for the
-                         first page. Encodes the last-seen check-run id scoped to this commit, so
-                         `page_size` on a follow-up request is ignored when a token is supplied.
+                         first page. Encodes the last-seen check-run id scoped to this commit and
+                         the filters below, so `page_size` on a follow-up request is ignored when
+                         a token is supplied and reusing a token under different filters is
+                         rejected with INVALID_ARGUMENT.
+                checkName:
+                    type: string
+                    description: Optional exact check-run name filter (the check run's `name`).
+                status:
+                    type: string
+                    description: |-
+                        Optional status filter: `queued`, `in_progress`, or `completed`. Any
+                         other value is rejected with INVALID_ARGUMENT.
         ListCheckRunsForCommitResponse:
             type: object
             properties:
@@ -10014,6 +10068,20 @@ components:
                 pageToken:
                     type: string
                     description: Opaque token from the preceding page.
+                since:
+                    type: string
+                    description: |-
+                        Optional inclusive RFC 3339 lower bound on comment creation time, e.g.
+                         `2026-08-01T00:00:00Z`, matching the list's chronological order. A
+                         malformed timestamp is rejected with INVALID_ARGUMENT. Page tokens embed
+                         the bound; reusing a token under a different `since` is rejected.
+                until:
+                    type: string
+                    description: |-
+                        Optional inclusive RFC 3339 upper bound on comment creation time, e.g.
+                         `2026-08-31T23:59:59Z`. A malformed timestamp is rejected with
+                         INVALID_ARGUMENT. Page tokens embed the bound; reusing a token under a
+                         different `until` is rejected.
         ListPullRequestCommentsResponse:
             type: object
             properties:
