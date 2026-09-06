@@ -308,7 +308,7 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `repository:metadata:read`               | Read repository metadata. Added automatically.                                                                                                                                                            |
 | `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source. |
-| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests.                                                                                                                                                                 |
+| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints.                                                                                         |
 | `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, and assigned labels.                                                                                                                             |
 | `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                                                                   |
 | `repository:pull_requests:reviews:read`  | Read pull request comments, comment threads, submitted reviews, and requested reviewers.                                                                                                                  |
@@ -354,7 +354,7 @@ Every endpoint charges a fixed cost against that budget before the handler runs.
 | 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                       |
 | 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                |
 | 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), and [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) |
-| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                                                                                                                                      |
+| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                              |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -399,7 +399,7 @@ Origin sends signed HTTP `POST` requests to the app's registered HTTPS webhook U
 
 Delivery is at least once. Deduplicate retries with `webhook-id`, durably accept the request, return `2xx` quickly, and process the event asynchronously.
 
-Origin retries transport errors, `429`, and `5xx` responses up to six total attempts. Retry delays are 30 seconds, 1 minute, 2 minutes, 4 minutes, and 8 minutes. Other `4xx` responses are terminal.
+Origin retries transport errors, `429`, and `5xx` responses up to seven total attempts. Retry delays are 5 seconds, 30 seconds, 1 minute, 2 minutes, 4 minutes, and 8 minutes. Other `4xx` responses are terminal.
 
 To confirm a receiver works before any real event reaches it, call [Ping Webhook](https://cursor.com/docs/api/origin/llms-full.txt#ping-webhook).
 
@@ -5427,7 +5427,7 @@ curl --request POST \
 
 ## Git data
 
-Low-level git objects. Scope: `repository:contents:read`. Empty repositories return `409`.
+Low-level git objects. Reads need `repository:contents:read`, and an empty repository returns `409`. [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files) and [Create Git Ref](https://cursor.com/docs/api/origin/llms-full.txt#create-git-ref) write git objects and need `repository:contents:write`.
 
 ### Get Blob
 
@@ -5599,6 +5599,147 @@ curl --request GET \
 }
 ```
 
+### Create Commit From Files
+
+/v1/origin/repos///git/commits:createFromFiles
+
+Requires scope `repository:contents:write` (installation access token or user credential).
+
+Creates a commit on a branch from inline file changes and advances the branch to it.
+
+The changes apply to the tree at `expectedHeadSha`, which becomes the new commit's parent. A branch that has moved or does not exist, a set of changes that leaves the tree unchanged, a delete of a path the tree does not hold, a write a push ruleset blocks, and a repository whose contents are mirrored from another host each return `FailedPrecondition` (HTTP 400).
+
+One request carries at most 1,000 file changes, 8 MiB per file, and 32 MiB of content in total. Exceeding a limit, repeating a path, or sending a malformed field returns `InvalidArgument` (HTTP 400), with `google.rpc.BadRequest` field violations naming the offending `files[i]` entry.
+
+The branch must already exist. Create it with [Create Git Ref](https://cursor.com/docs/api/origin/llms-full.txt#create-git-ref) first, then commit onto it.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Request Body
+
+`targetBranch` string Required
+
+Branch that receives the commit, as `<branch>`, `heads/<branch>`, or `refs/heads/<branch>`. The branch must already exist. `HEAD` is rejected in every spelling.
+
+`expectedHeadSha` string Required
+
+Full hex SHA the target branch must currently point at. It becomes the new commit's parent. The all-zeros SHA is rejected.
+
+`message` string Required
+
+Commit message.
+
+`author` object Required
+
+Commit author. Timestamps are assigned by the server.
+
+`author.name` string Required
+
+Name recorded in the Git identity.
+
+`author.email` string Required
+
+Email recorded in the Git identity.
+
+`committer` object
+
+Commit committer. Defaults to `author` when omitted.
+
+`committer.name` string
+
+Name recorded in the Git identity. Required when `committer` is present.
+
+`committer.email` string
+
+Email recorded in the Git identity. Required when `committer` is present.
+
+`files` array Required
+
+File changes applied to the branch tip's tree. At least one change is required, and paths must be unique within a request.
+
+`files[].path` string Required
+
+Repository-relative path using `/` separators, for example `docs/changelog.md`.
+
+`files[].content` string
+
+New file contents, encoded per `files[].encoding`. Creates the file or replaces its contents. Set exactly one of `files[].content` and `files[].delete`.
+
+`files[].delete` boolean
+
+Removes the file. Must be `true` when set. Set exactly one of `files[].content` and `files[].delete`.
+
+`files[].encoding` string
+
+Encoding of `files[].content`. Allowed values: `utf-8` (default), `base64`. Ignored for a delete.
+
+`files[].mode` string
+
+File mode for `files[].content`. Allowed values: `file` (default), `executable`, `symlink`, where the contents are the link target. Ignored for a delete.
+
+#### Response Fields
+
+`sha` string
+
+SHA of the new commit, now the branch tip.
+
+`treeSha` string
+
+SHA of the new commit's root tree.
+
+`previousHeadSha` string
+
+Branch tip before the write; the new commit's parent.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/git/commits:createFromFiles' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "targetBranch": "feature/login",
+  "expectedHeadSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+  "message": "Add login telemetry",
+  "author": {
+    "name": "Jane Doe",
+    "email": "jane@acme.dev"
+  },
+  "files": [
+    {
+      "path": "src/login/telemetry.ts",
+      "content": "export const LOGIN_EVENT = 1;"
+    },
+    {
+      "path": "assets/login.png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "encoding": "base64"
+    },
+    {
+      "path": "src/login/legacy.ts",
+      "delete": true
+    }
+  ]
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "sha": "5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d",
+  "treeSha": "a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8",
+  "previousHeadSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
+}
+```
+
 ### Get Git Ref
 
 /v1/origin/repos///git/ref/
@@ -5650,6 +5791,77 @@ curl --request GET \
 ```json
 {
   "ref": "refs/heads/main",
+  "object": {
+    "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+    "type": "commit"
+  }
+}
+```
+
+### Create Git Ref
+
+/v1/origin/repos///git/refs
+
+Requires scope `repository:contents:write` (installation access token or user credential).
+
+Creates a branch reference pointing at an existing commit.
+
+Only branch references can be created. A tag or any other reference namespace, and a `sha` that is not the full hex SHA of a commit in the repository, return `InvalidArgument` (HTTP 400). Creating a branch that already points at `sha` succeeds and returns the existing reference; a branch that exists at any other commit returns `AlreadyExists` (HTTP 409 Conflict). A create a push ruleset blocks, or one on a repository whose contents are mirrored from another host, returns `FailedPrecondition` (HTTP 400).
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Request Body
+
+`ref` string Required
+
+Branch reference to create, as `refs/heads/<branch>` or `heads/<branch>`.
+
+`sha` string Required
+
+Full hex SHA of an existing commit that the new branch points at.
+
+#### Response Fields
+
+`ref` string
+
+Full ref name, e.g. "refs/heads/main".
+
+`object` object
+
+Object this ref points at directly (unpeeled). For a branch, `object.type` is "commit".
+
+`object.sha` string
+
+Hex SHA of the target object.
+
+`object.type` string
+
+One of "commit", "tree", "blob", or "tag".
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/git/refs' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "ref": "refs/heads/feature/login",
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "ref": "refs/heads/feature/login",
   "object": {
     "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
     "type": "commit"
