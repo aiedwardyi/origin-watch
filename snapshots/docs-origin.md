@@ -18,7 +18,8 @@ In early beta you can:
 - [Open, review, and merge pull requests](https://cursor.com/docs/origin/pull-requests.md)
 - [Browse and search](https://cursor.com/docs/origin/browse.md) code at [cursor.com/codebase](https://cursor.com/codebase)
 - Manage [repository settings](https://cursor.com/docs/origin/settings.md) and [codebase settings](https://cursor.com/docs/origin/codebase-settings.md)
-- Connect [third-party apps](https://cursor.com/docs/origin/settings.md#apps) (Vercel, Depot, and Buildkite) from repository settings
+- Install [Origin Apps](https://cursor.com/docs/origin/settings.md#apps) from repository settings
+- Create private Origin Apps to build integrations on Origin through our [Public API](https://cursor.com/docs/api/origin/llms-full.txt)
 - Connect [automations and cloud agents](https://cursor.com/docs/origin/integrations.md) to Origin repos
 - [Install the Origin CLI](https://cursor.com/docs/origin/cli.md) for terminal workflows
 
