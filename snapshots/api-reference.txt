@@ -3840,6 +3840,22 @@ Opaque repository identifier assigned by the source.
 
 Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
 
+`repositories[].visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`repositories[].allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`repositories[].allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`repositories[].deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
+
 `nextPageToken` string
 
 Opaque cursor for the next page; empty when there are no more pages.
@@ -4263,6 +4279,22 @@ Opaque repository identifier assigned by the source.
 
 Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
 
+`repositories[].visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`repositories[].allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`repositories[].allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`repositories[].deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
+
 `nextPageToken` string
 
 Opaque cursor for the next page; empty when there are no more pages.
@@ -4382,6 +4414,22 @@ Opaque repository identifier assigned by the source.
 `mirror.status` string
 
 Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+
+`visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
 
 ```bash
 curl --request GET \
@@ -4504,6 +4552,22 @@ Opaque repository identifier assigned by the source.
 `mirror.status` string
 
 Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+
+`visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
 
 ```bash
 curl --request POST \
@@ -4837,6 +4901,10 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 
 Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours in the future are rejected with `InvalidArgument` (HTTP 400) rather than clamped. Omit it on a create to record no deadline; omit it on an update to leave the stored deadline unchanged.
 
+`checkRun.isRerequestable` boolean
+
+Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a new run for the same head SHA and `key` under a new `externalId`. Once a run is re-requested it is excluded from the commit's latest check state until that new run arrives, so a required check reads as missing and blocks merges and a non-required check disappears from the pull request. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
+
 #### Response Fields
 
 `checkSuite` object
@@ -5103,6 +5171,14 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 
 Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
 
+`checkRun.isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`checkRun.rerequestedAt` string
+
+RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+
 ```bash
 curl --request POST \
   --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/check-runs' \
@@ -5310,6 +5386,10 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 `checkRuns[0].deadlineAt` string
 
 Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours in the future are rejected with `InvalidArgument` (HTTP 400) rather than clamped. Omit it on a create to record no deadline; omit it on an update to leave the stored deadline unchanged.
+
+`checkRuns[0].isRerequestable` boolean
+
+Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a new run for the same head SHA and `key` under a new `externalId`. Once a run is re-requested it is excluded from the commit's latest check state until that new run arrives, so a required check reads as missing and blocks merges and a non-required check disappears from the pull request. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
 #### Response Fields
 
@@ -5576,6 +5656,14 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 `checkRuns[].deadlineAt` string
 
 Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
+
+`checkRuns[].isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`checkRuns[].rerequestedAt` string
+
+RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
 
 ```bash
 curl --request POST \
@@ -5858,6 +5946,14 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 `deadlineAt` string
 
 Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
+
+`isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`rerequestedAt` string
+
+RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
 
 ```bash
 curl --request GET \
@@ -6395,7 +6491,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user access token).
 
-Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
+Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. A run that has been re-requested is omitted the same way until the app that owns it posts a new attempt or refreshes the existing one with a newer `externalUpdatedAt`. Read an omitted attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
 
 #### Path Parameters
 
@@ -6579,6 +6675,14 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 
 Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
 
+`checkRuns[].isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`checkRuns[].rerequestedAt` string
+
+RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+
 `nextPageToken` string
 
 Opaque cursor for the next page; empty when there are no more pages.
@@ -6642,7 +6746,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user access token).
 
-Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
+Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted, as is a run that has been re-requested, until the app that owns it posts a new attempt or refreshes the existing one with a newer `externalUpdatedAt`. Read an omitted attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
 
 Filters apply to the collapsed set, so a run matches on its latest attempt's status and a filter never resurfaces a superseded attempt. Page tokens embed the filters they were minted under, so a token replayed under different filters is rejected; restart pagination when a filter changes.
 
@@ -6835,6 +6939,14 @@ Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
 `checkRuns[].deadlineAt` string
 
 Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
+
+`checkRuns[].isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`checkRuns[].rerequestedAt` string
+
+RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
 
 `nextPageToken` string
 
@@ -11801,6 +11913,10 @@ Pull number to merge. When this pull is stacked, the merge lands every pull from
 `expectedHeadSha` string
 
 Guard against merging a head your app has not seen: the full commit SHA (40 or 64 hexadecimal characters) expected to be the pull request's current head. When the head has moved, the merge is rejected with `ABORTED` (HTTP 409 Conflict) and nothing merges. Values that are not a full commit SHA are rejected with `InvalidArgument` (HTTP 400). Omit to merge whatever the current head is. Not evaluated when the pull request is already merged, which returns idempotent success.
+
+`mergeMethod` string
+
+How the pull request lands. Allowed values: `merge`, which writes a merge commit, and `squash`, which writes a single squash commit. A method the repository does not allow is rejected with `FailedPrecondition` (HTTP 400), and any other value with `InvalidArgument` (HTTP 400). Omit it to use the repository's default: a merge commit when the repository allows one, otherwise a squash, and a squash when the base branch requires linear history.
 
 #### Response Fields
 
