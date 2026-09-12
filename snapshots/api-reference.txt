@@ -322,9 +322,9 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 
 | Scope                                    | Allows                                                                                                                                                                                                    |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `repository:metadata:read`               | Read repository metadata. Added automatically.                                                                                                                                                            |
+| `repository:metadata:read`               | Read repository metadata and mirror transition jobs. Added automatically.                                                                                                                                 |
 | `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source. |
-| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints.                                                                                         |
+| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints. Re-request a check run.                                                                 |
 | `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, and assigned labels.                                                                                                                             |
 | `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                                                                   |
 | `repository:pull_requests:reviews:read`  | Read pull request comments, comment threads, submitted reviews, and requested reviewers.                                                                                                                  |
@@ -335,10 +335,13 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 | `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                                                                  |
 | `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                                                                 |
 | `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                                                                           |
+| `repository:settings:write`              | Update repository settings: the default branch, visibility, merge methods, and automatic head-branch deletion.                                                                                            |
 
 Requesting a `:write` scope also grants the matching `:read` scope, so `repository:labels:write` covers `repository:labels:read` and you do not have to list both. The reverse does not hold: a read scope never grants writes.
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
+
+Mirror-state changes sit outside this table. [Transition Repo Mirror](https://cursor.com/docs/api/origin/llms-full.txt#transition-repo-mirror), [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/llms-full.txt#force-repo-mirror-cutover), and [Detach Repo Mirror](https://cursor.com/docs/api/origin/llms-full.txt#detach-repo-mirror) take `repository:mirror:write` or `repository:mirror:delete`, which an app cannot request at installation: they are carried by a Cursor user credential, and the caller must also administer the repository on the mirror's upstream source.
 
 The table covers the scopes an app requests at installation. To look up the scope a single operation requires, read its `x-origin-scopes` extension in the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml). That extension covers every operation, including the `app`, `installation`, and `namespace` scopes that come with the credential itself rather than from an installation grant. An operation whose scopes all come with the credential marks its extension `ambient: true`: there is nothing to request for it, and presenting the right credential is enough.
 
@@ -350,6 +353,8 @@ An installation uses every scope it holds on a native Origin repository and on a
 - `repository:contents:read`
 
 Every other scope returns `403` on that repository, whatever the workspace admin approved. Over the REST API, repository and contents reads, commit comparison, and [Sync Mirror](https://cursor.com/docs/api/origin/llms-full.txt#sync-mirror) keep working, and Origin rejects pull requests, reviews, comments, checks, rulesets, and every write. Over Git HTTPS, clone, fetch, pull, and LFS download keep working, and Origin rejects push and LFS upload.
+
+Moving a repository out of that state is a user-credential operation rather than something an installation can do: [Transition Repo Mirror](https://cursor.com/docs/api/origin/llms-full.txt#transition-repo-mirror) advances the mirror direction, [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/llms-full.txt#force-repo-mirror-cutover) cuts over to the upstream source without pushing divergent refs back, and [Detach Repo Mirror](https://cursor.com/docs/api/origin/llms-full.txt#detach-repo-mirror) disconnects the mirror for good.
 
 The `mirror` object on a repository does not tell you whether writes are allowed. A mirror partway through a transition can report `mirror.status` as `outbound` and still be read-only, so treat the `403` as authoritative rather than branching on `mirror.status`.
 
@@ -370,7 +375,7 @@ Every endpoint charges a fixed cost against that budget before the handler runs.
 | 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                       |
 | 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                |
 | 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), and [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) |
-| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), and [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request)                                                                                                                                                                                                                              |
+| 10   | [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request), [Transition Repo Mirror](https://cursor.com/docs/api/origin/llms-full.txt#transition-repo-mirror), and [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/llms-full.txt#force-repo-mirror-cutover)                  |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -2019,7 +2024,37 @@ Whether the reporting app declared this run re-requestable (`CheckRunInput.is_re
 
 `checkRun.rerequestedAt` string
 
-When this run was re-requested. Unset if never re-requested; set at most once per run — a re-requested run is excluded from the commit's latest CI state until the owning app posts the new run it committed to by declaring `is_rerequestable`, and that new run is the re-requestable one. RFC 3339 timestamp.
+Set while a re-request is outstanding; cleared when the provider posts again. Unset means no re-request is pending. While set, the run stays in the commit's CI state as pending (`status` and `conclusion` are the superseded result); the owning app answers by posting the run it committed to by declaring `is_rerequestable` — a new run for the same `key`, or an update of this run (which clears this field) — after which the run may be re-requested again. RFC 3339 timestamp.
+
+`checkRun.rerequestedBy` object
+
+Principal that re-requested the run. Present iff `rerequested_at` is set; cleared together with it when the owning app answers.
+
+`checkRun.rerequestedBy.user` object
+
+`checkRun.rerequestedBy.user.id` string
+
+`checkRun.rerequestedBy.user.email` string Required
+
+`checkRun.rerequestedBy.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field. May also be absent on webhook payloads whose actor could not be resolved.
+
+`checkRun.rerequestedBy.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`checkRun.rerequestedBy.app` object
+
+`checkRun.rerequestedBy.app.id` string
+
+`checkRun.rerequestedBy.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted on payloads whose app could not be resolved and on the first-party Cursor facade actor.
+
+`checkRun.rerequestedBy.serviceAccount` object
+
+`checkRun.rerequestedBy.serviceAccount.id` string
 
 `actor` object
 
@@ -2140,7 +2175,7 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 repository.check\_run.rerequested
 
-repository.check\_run.rerequested webhook payload, delivered only to the app that owns the check run. Answer by posting a NEW run for the same head SHA and key; the stamped run's status is never reset. At most one rerequested event ever exists per check run (the stamp is one-shot; repeat re-requests are rejected), so dedupe redeliveries on the event id alone; `check_run.rerequested_at` records the stamp. The payload carries no pull request context (check runs attach to `(repository, sha)`): a consumer that needs the pull request resolves it from `check_run.sha` via its own head mapping, or `ListPullRequests` filtered to the head branch it built.
+repository.check\_run.rerequested webhook payload, delivered only to the app that owns the check run. Answer by posting a fresh run for the same head SHA and key — a new run (new external\_id) or an update of the re-requested run — the stamped run's status is never reset by Origin, and the answering post clears `rerequested_at`. Each accepted re-request emits one event, and a run may be re-requested again once answered, so dedupe redeliveries on the event id alone; `check_run.rerequested_at` carries the outstanding stamp. The payload carries no pull request context (check runs attach to `(repository, sha)`): a consumer that needs the pull request resolves it from `check_run.sha` via its own head mapping, or `ListPullRequests` filtered to the head branch it built.
 
 #### Payload Fields
 
@@ -2260,7 +2295,7 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkRun` object
 
-The re-requested check run; `check_run.rerequested_at` records the stamp.
+The re-requested check run; `check_run.rerequested_at` records the stamp and `check_run.rerequested_by` the principal that asked.
 
 `checkRun.id` string
 
@@ -2400,37 +2435,37 @@ Whether the reporting app declared this run re-requestable (`CheckRunInput.is_re
 
 `checkRun.rerequestedAt` string
 
-When this run was re-requested. Unset if never re-requested; set at most once per run — a re-requested run is excluded from the commit's latest CI state until the owning app posts the new run it committed to by declaring `is_rerequestable`, and that new run is the re-requestable one. RFC 3339 timestamp.
+Set while a re-request is outstanding; cleared when the provider posts again. Unset means no re-request is pending. While set, the run stays in the commit's CI state as pending (`status` and `conclusion` are the superseded result); the owning app answers by posting the run it committed to by declaring `is_rerequestable` — a new run for the same `key`, or an update of this run (which clears this field) — after which the run may be re-requested again. RFC 3339 timestamp.
 
-`rerequestedBy` object
+`checkRun.rerequestedBy` object
 
-The principal that re-requested the check run.
+Principal that re-requested the run. Present iff `rerequested_at` is set; cleared together with it when the owning app answers.
 
-`rerequestedBy.user` object
+`checkRun.rerequestedBy.user` object
 
-`rerequestedBy.user.id` string
+`checkRun.rerequestedBy.user.id` string
 
-`rerequestedBy.user.email` string Required
+`checkRun.rerequestedBy.user.email` string Required
 
-`rerequestedBy.user.displayName` string
+`checkRun.rerequestedBy.user.displayName` string
 
 Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field. May also be absent on webhook payloads whose actor could not be resolved.
 
-`rerequestedBy.user.handle` string
+`checkRun.rerequestedBy.user.handle` string
 
 The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
 
-`rerequestedBy.app` object
+`checkRun.rerequestedBy.app` object
 
-`rerequestedBy.app.id` string
+`checkRun.rerequestedBy.app.id` string
 
-`rerequestedBy.app.displayName` string
+`checkRun.rerequestedBy.app.displayName` string
 
 The app's registered display name, never empty when present. Omitted on payloads whose app could not be resolved and on the first-party Cursor facade actor.
 
-`rerequestedBy.serviceAccount` object
+`checkRun.rerequestedBy.serviceAccount` object
 
-`rerequestedBy.serviceAccount.id` string
+`checkRun.rerequestedBy.serviceAccount.id` string
 
 **Sample `event.payload`:**
 
@@ -2508,12 +2543,12 @@ The app's registered display name, never empty when present. Omitted on payloads
       "text": "FAIL telemetry.spec.ts > flushes queued events on shutdown"
     },
     "isRerequestable": true,
-    "rerequestedAt": "2026-08-02T15:10:00Z"
-  },
-  "rerequestedBy": {
-    "user": {
-      "id": "user_01k2ja2000e0080000000000c3",
-      "email": "jane@acme.dev"
+    "rerequestedAt": "2026-08-02T15:10:00Z",
+    "rerequestedBy": {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
+      }
     }
   }
 }
@@ -4457,6 +4492,170 @@ curl --request GET \
 }
 ```
 
+### Update Repo
+
+/v1/origin/repos//
+
+Requires scope `repository:settings:write` (installation access token or user access token).
+
+Updates repository settings. Omitted fields are left unchanged, and at least one settable field must be provided.
+
+Settings apply as independent groups in a fixed order: default branch, automatic head-branch deletion, visibility, then merge methods. The update is not atomic across groups. When a group is rejected, the groups before it in that order are already applied and stay applied, so retry with the rejected group corrected to converge on the state you asked for. The response carries the repository as of the last group applied.
+
+A request that sets no field returns `InvalidArgument` (HTTP 400). A concurrent change to the default branch returns `409 Conflict`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Request Body
+
+`defaultBranch` string
+
+New default branch. Must name an existing branch. Supported only on repositories that neither pull from nor push to an upstream source; other repositories return `FailedPrecondition` (HTTP 400).
+
+`allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits. Must be sent together with `allowSquashMerge`, and at least one of the two must be `true`. Sending one without the other returns `InvalidArgument` (HTTP 400).
+
+`allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges. Must be sent together with `allowMergeCommit`, and at least one of the two must be `true`. Sending one without the other returns `InvalidArgument` (HTTP 400).
+
+`deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge. Supported only on repositories whose pull requests live on this API; a repository that pulls from an upstream source returns `FailedPrecondition` (HTTP 400).
+
+`visibility` string
+
+New repository visibility. Allowed values: `internal`, `private`. Omit it to leave the visibility unchanged.
+
+#### Response Fields
+
+`id` string
+
+Origin repository identifier.
+
+`name` string
+
+Repository name within its owner.
+
+`fullName` string
+
+Combined owner and repository name, such as acme/api.
+
+`owner` object
+
+Owner reference for the repository.
+
+`owner.slug` string
+
+URL-facing owner slug used with the owner ID to identify the repository owner.
+
+`owner.id` string
+
+Origin owner identifier.
+
+`owner.type` string
+
+Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when unknown.
+
+`defaultBranch` string
+
+Repository default branch name.
+
+`createdAt` string
+
+RFC 3339 repository creation timestamp.
+
+`updatedAt` string
+
+RFC 3339 repository update timestamp.
+
+`pushedAt` string
+
+RFC 3339 timestamp of the most recent push shown by the full repository response.
+
+`cloneUrl` string
+
+Output-only HTTPS clone URL; the get-repository response includes it.
+
+`mirror` object
+
+Mirror metadata. Absent for a native repository and before a mirror's initial sync is ready.
+
+`mirror.source` string
+
+Mirror source. Allowed value: `github`.
+
+`mirror.sourceId` string
+
+Opaque repository identifier assigned by the source.
+
+`mirror.status` string
+
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+
+`visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
+
+```bash
+curl --request PATCH \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "defaultBranch": "main",
+  "allowMergeCommit": false,
+  "allowSquashMerge": true,
+  "deleteBranchOnMerge": true,
+  "visibility": "private"
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "id": "repo_01k2ja2000e0080000000000q4",
+  "name": "rocket",
+  "fullName": "acme/rocket",
+  "owner": {
+    "slug": "acme",
+    "id": "ns_01k2ja2000e0080000000000p3",
+    "type": "team"
+  },
+  "defaultBranch": "main",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "pushedAt": "2026-08-02T14:45:00Z",
+  "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git",
+  "visibility": "private",
+  "allowMergeCommit": false,
+  "allowSquashMerge": true,
+  "deleteBranchOnMerge": true
+}
+```
+
 ### Create Repo
 
 /v1/origin/repos/
@@ -4779,6 +4978,362 @@ curl --request POST \
 }
 ```
 
+### Detach Repo Mirror
+
+/v1/origin/repos///mirror
+
+Requires scope `repository:mirror:delete` (user access token).
+
+Permanently disconnects a mirrored repository from its upstream source. The repository keeps its current contents and becomes a native repository, syncing stops in both directions, and the mirror's deploy credential is deleted. The response body is empty.
+
+Detaching is not reversible through this API. A repository that never had a mirror returns `FailedPrecondition` (HTTP 400); detaching an already-detached repository succeeds without effect.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Response Fields
+
+Successful requests return no response body.
+
+```bash
+curl --request DELETE \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/mirror' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response:**
+
+```text
+204 No Content
+```
+
+### Get Mirror Transition Job
+
+/v1/origin/repos///mirror/transition-jobs/
+
+Requires scope `repository:metadata:read` (installation access token or user access token).
+
+Returns one mirror transition job by id. An unknown job id returns `404`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`jobId` string Required
+
+Identifier of the transition job, as returned in `job.id`.
+
+#### Response Fields
+
+`id` string
+
+Unique identifier of the job.
+
+`transition` string
+
+The mirror-direction change this job performs. Allowed values: `initial_to_inbound`, `inbound_to_outbound`, `outbound_to_inbound`.
+
+`status` string
+
+Lifecycle state. Allowed values: `queued`, `running`, `succeeded`, `failed_rolled_back`, `requires_attention`, `superseded`. `succeeded`, `failed_rolled_back`, and `superseded` are terminal. `requires_attention` needs operator intervention or a forced cutover.
+
+`phase` string
+
+Progress detail within `status`, for display and debugging. One of `queued`, `starting`, `draining-writes`, `initializing-mirror-fetch`, `finalizing-mirror-fetch`, `finalizing-mirror-push`, `snapshotting-refs`, `verifying-integrity`, `reopening-inbound-mirror`, `committing-target-status`, `rolling-back`, or `completed`. New phases can appear as the transition process evolves, so poll `status` for completion rather than matching on phases.
+
+`attemptCount` integer
+
+Number of times this job has been attempted.
+
+`drainUntil` string
+
+RFC 3339 timestamp of when the write-drain window of an in-progress transition ends. Absent outside the draining phase.
+
+`lastErrorCode` string
+
+Stable code identifying why the job last failed, such as `InboundMirrorDrainTimeout` or `MirrorIntegrityMismatch`. Absent while the job has not failed.
+
+`lastErrorMessage` string
+
+Human-readable detail for `lastErrorCode`. Absent while the job has not failed.
+
+`startedAt` string
+
+RFC 3339 timestamp of when the job started running. Absent while queued.
+
+`completedAt` string
+
+RFC 3339 timestamp of when the job reached a terminal status. Absent until then.
+
+`createdAt` string
+
+RFC 3339 job creation timestamp.
+
+`updatedAt` string
+
+RFC 3339 job update timestamp.
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/mirror/transition-jobs/JOB_ID' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "id": "rmt_01k2ja2000e0080000000000m3",
+  "transition": "inbound_to_outbound",
+  "status": "succeeded",
+  "phase": "completed",
+  "attemptCount": 1,
+  "startedAt": "2026-08-02T15:00:00Z",
+  "completedAt": "2026-08-02T15:12:00Z",
+  "createdAt": "2026-08-02T14:59:30Z",
+  "updatedAt": "2026-08-02T15:12:00Z"
+}
+```
+
+### Get Active Mirror Transition Job
+
+/v1/origin/repos///mirror/transition-jobs:active
+
+Requires scope `repository:metadata:read` (installation access token or user access token).
+
+Returns the repository's currently active mirror transition job and its most recent terminal one. Both fields are optional, so a repository that has never transitioned returns an empty object. Poll this endpoint to follow a transition: once `activeJob` disappears, `lastJob` tells you how it ended.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Response Fields
+
+`activeJob` object
+
+The currently active transition job, carrying the same fields as [Get Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-mirror-transition-job). Absent when no transition is in progress.
+
+`lastJob` object
+
+The most recent job that reached a terminal status, carrying the same fields as [Get Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-mirror-transition-job). Absent when the repository has never completed a transition.
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/mirror/transition-jobs:active' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "activeJob": {
+    "id": "rmt_01k2ja2000e0080000000000m4",
+    "transition": "outbound_to_inbound",
+    "status": "running",
+    "phase": "draining-writes",
+    "attemptCount": 1,
+    "drainUntil": "2026-08-02T15:05:00Z",
+    "startedAt": "2026-08-02T15:00:00Z",
+    "createdAt": "2026-08-02T14:59:30Z",
+    "updatedAt": "2026-08-02T15:01:00Z"
+  },
+  "lastJob": {
+    "id": "rmt_01k2ja2000e0080000000000m3",
+    "transition": "inbound_to_outbound",
+    "status": "succeeded",
+    "phase": "completed",
+    "attemptCount": 1,
+    "startedAt": "2026-08-01T10:00:00Z",
+    "completedAt": "2026-08-01T10:12:00Z",
+    "createdAt": "2026-08-01T09:59:30Z",
+    "updatedAt": "2026-08-01T10:12:00Z"
+  }
+}
+```
+
+### Force Repo Mirror Cutover
+
+/v1/origin/repos///mirror:forceCutover
+
+Requires scope `repository:mirror:write` (user access token).
+
+Forces an `outbound_to_inbound` cutover without pushing this host's divergent state back to the upstream source. The source is adopted as the source of truth as it stands, and refs that exist only on this host are snapshotted and abandoned. Returns the job tracking the forced cutover.
+
+Accepted only for a repository in `outbound` status, or one stuck in an outbound-to-inbound transition whose active job reports `requires_attention`, in which case that job is superseded. Any other state, including a queued or running transition job, returns `FailedPrecondition` (HTTP 400). The caller must administer the repository on the mirror's upstream source; a caller without that access returns `403`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Request Body
+
+The request takes no fields. Send an empty JSON object.
+
+#### Response Fields
+
+`repository` object
+
+The repository, reflecting its transitioning mirror state. Carries the same fields as [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo).
+
+`job` object
+
+The job tracking the transition, carrying the same fields as [Get Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-mirror-transition-job). Poll it until it reaches a terminal status.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/mirror:forceCutover' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{}'
+```
+
+**Response shape:**
+
+```json
+{
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "fullName": "acme/rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    },
+    "defaultBranch": "main",
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T15:00:00Z",
+    "pushedAt": "2026-08-02T14:45:00Z",
+    "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git",
+    "mirror": {
+      "source": "github",
+      "sourceId": "R_kgDOAbc123",
+      "status": "outbound"
+    }
+  },
+  "job": {
+    "id": "rmt_01k2ja2000e0080000000000m4",
+    "transition": "outbound_to_inbound",
+    "status": "running",
+    "phase": "snapshotting-refs",
+    "attemptCount": 1,
+    "startedAt": "2026-08-02T15:00:00Z",
+    "createdAt": "2026-08-02T14:59:30Z",
+    "updatedAt": "2026-08-02T15:01:00Z"
+  }
+}
+```
+
+### Transition Repo Mirror
+
+/v1/origin/repos///mirror:transition
+
+Requires scope `repository:mirror:write` (user access token).
+
+Starts a mirror-state transition on a mirrored repository and returns the job tracking it. The repository enters a transitioning mirror status while the job runs, so poll [Get Active Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-active-mirror-transition-job) or [Get Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-mirror-transition-job) until the job reaches a terminal status.
+
+A repository that is not in the transition's expected start state, or that already has an active transition job, returns `FailedPrecondition` (HTTP 400). The caller must administer the repository on the mirror's upstream source; a caller without that access returns `403`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Request Body
+
+`transition` string Required
+
+The mirror-state change to start. Allowed values: `initial_to_inbound`, `inbound_to_outbound`, `outbound_to_inbound`.
+
+#### Response Fields
+
+`repository` object
+
+The repository, reflecting its transitioning mirror state. Carries the same fields as [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo).
+
+`job` object
+
+The job tracking the transition, carrying the same fields as [Get Mirror Transition Job](https://cursor.com/docs/api/origin/llms-full.txt#get-mirror-transition-job). Poll it until it reaches a terminal status.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/mirror:transition' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "transition": "inbound_to_outbound"
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "fullName": "acme/rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    },
+    "defaultBranch": "main",
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T15:00:00Z",
+    "pushedAt": "2026-08-02T14:45:00Z",
+    "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git",
+    "mirror": {
+      "source": "github",
+      "sourceId": "R_kgDOAbc123",
+      "status": "inbound"
+    }
+  },
+  "job": {
+    "id": "rmt_01k2ja2000e0080000000000m3",
+    "transition": "inbound_to_outbound",
+    "status": "running",
+    "phase": "draining-writes",
+    "attemptCount": 1,
+    "drainUntil": "2026-08-02T15:05:00Z",
+    "startedAt": "2026-08-02T15:00:00Z",
+    "createdAt": "2026-08-02T14:59:30Z",
+    "updatedAt": "2026-08-02T15:01:00Z"
+  }
+}
+```
+
 ## Checks
 
 - The first run upsert creates its suite automatically.
@@ -4903,7 +5458,7 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 `checkRun.isRerequestable` boolean
 
-Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a new run for the same head SHA and `key` under a new `externalId`. Once a run is re-requested it is excluded from the commit's latest check state until that new run arrives, so a required check reads as missing and blocks merges and a non-required check disappears from the pull request. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
+Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
 #### Response Fields
 
@@ -5177,7 +5732,11 @@ Whether the reporting app declared this run re-requestable.
 
 `checkRun.rerequestedAt` string
 
-RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`checkRun.rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
 ```bash
 curl --request POST \
@@ -5389,7 +5948,7 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 `checkRuns[0].isRerequestable` boolean
 
-Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a new run for the same head SHA and `key` under a new `externalId`. Once a run is re-requested it is excluded from the commit's latest check state until that new run arrives, so a required check reads as missing and blocks merges and a non-required check disappears from the pull request. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
+Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
 #### Response Fields
 
@@ -5663,7 +6222,11 @@ Whether the reporting app declared this run re-requestable.
 
 `checkRuns[].rerequestedAt` string
 
-RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`checkRuns[].rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
 ```bash
 curl --request POST \
@@ -5953,7 +6516,11 @@ Whether the reporting app declared this run re-requestable.
 
 `rerequestedAt` string
 
-RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
 ```bash
 curl --request GET \
@@ -6321,6 +6888,260 @@ curl --request POST \
 }
 ```
 
+### Rerequest Check Run
+
+/v1/origin/repos///check-runs//rerequest
+
+Requires scope `repository:contents:write` (installation access token or user access token).
+
+Asks the app that reported a check run to run it again. Origin records the request on the run as `rerequestedAt` and notifies the owning app with [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events). The app answers by posting a fresh run for the same head SHA and `key`, either a new run or an update of this one, which clears `rerequestedAt`. The call never changes the run's own `status` or `conclusion`.
+
+The run must be `completed`, must carry `isRerequestable`, must be the current attempt for its `key`, and must sit on the current head of an open pull request. Anything else returns `FailedPrecondition` (HTTP 400).
+
+One re-request can be outstanding per run. A repeat request while `rerequestedAt` is set returns `AlreadyExists` (HTTP 409 Conflict), and the run becomes re-requestable again once the owning app has answered. Any principal holding [`repository:contents:write`](https://cursor.com/docs/api/origin/llms-full.txt#scopes) can re-request any re-requestable run, whichever app reported it. A `checkRunId` that is unknown, or that belongs to another repository, returns `404`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`checkRunId` string Required
+
+Server-assigned check-run id (`cr_...`).
+
+#### Request Body
+
+The request takes no fields. Send an empty JSON object.
+
+#### Response Fields
+
+`id` string
+
+Server-assigned check run identifier.
+
+`repository` object
+
+Repository reference for the run.
+
+`repository.id` string
+
+Repository identifier in a container reference.
+
+`repository.name` string
+
+Repository name in a container reference.
+
+`repository.owner` object
+
+Owner reference for the repository.
+
+`repository.owner.slug` string
+
+URL-facing owner slug used with the owner ID to identify the repository owner.
+
+`repository.owner.id` string
+
+Origin owner identifier.
+
+`repository.owner.type` string
+
+Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when unknown.
+
+`checkSuite` object
+
+Reference to the containing check suite.
+
+`checkSuite.id` string
+
+Server-assigned identifier of the containing check suite.
+
+`sha` string
+
+Commit SHA to which the run is attached.
+
+`key` string
+
+Stable app-chosen logical run identity; required checks may match on app, suite key, and this key.
+
+`name` string
+
+Display-only run name; it is not used for required-check matching.
+
+`status` string
+
+Lifecycle status; queued, in\_progress, or completed.
+
+`conclusion` string
+
+Required for a completed run; success, failure, neutral, cancelled, skipped, timed\_out, action\_required, or stale.
+
+`detailsUrl` string
+
+Separate link to the provider's full result page.
+
+`externalUpdatedAt` string
+
+External update timestamp used to order updates so stale retries cannot replace newer state.
+
+`startedAt` string
+
+Provider-reported RFC 3339 start time when supplied.
+
+`completedAt` string
+
+Provider-reported RFC 3339 completion time when supplied.
+
+`createdAt` string
+
+RFC 3339 run creation timestamp.
+
+`updatedAt` string
+
+RFC 3339 timestamp for the latest persisted run update.
+
+`externalId` string
+
+Provider identity for one attempt. Reuse it to update that attempt and use a new value for a retry.
+
+`actor` object
+
+Public actor that produced the run.
+
+`actor.user` object
+
+User variant of the actor. Set when a user performed the action.
+
+`actor.user.id` string
+
+Public identifier for the user.
+
+`actor.user.email` string
+
+Email address of the user. Always set when the user variant is present.
+
+`actor.user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`actor.user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
+`actor.app` object
+
+App variant of the actor. Set when an app performed the action.
+
+`actor.app.id` string
+
+Public identifier for the app.
+
+`actor.app.displayName` string
+
+The app's registered display name. Omitted when the app cannot be resolved and on Cursor's first-party managed actor.
+
+`actor.serviceAccount` object
+
+Service account variant of the actor. Set when a service account performed the action.
+
+`actor.serviceAccount.id` string
+
+Public identifier for the service account.
+
+`output` object
+
+Human-readable result object containing title, summary, and longer text when supplied.
+
+`output.title` string
+
+Short headline for the output. Maximum length: 255 characters.
+
+`output.summary` string
+
+Summary of the output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
+
+`output.text` string
+
+Detailed output. May contain Markdown. Maximum UTF-8 size: 65535 bytes.
+
+`deadlineAt` string
+
+Deadline recorded for the check run, as an RFC 3339 timestamp. Absent when the run has no deadline, including after the run completes.
+
+`isRerequestable` boolean
+
+Whether the reporting app declared this run re-requestable.
+
+`rerequestedAt` string
+
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/check-runs/CHECK_RUN_ID/rerequest' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{}'
+```
+
+**Response shape:**
+
+```json
+{
+  "id": "cr_01k2ja2000e0080000000000g7",
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    }
+  },
+  "checkSuite": {
+    "id": "crg_01k2ja2000e0080000000000h8"
+  },
+  "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+  "key": "ci-8842-unit-tests",
+  "name": "unit-tests",
+  "status": "completed",
+  "conclusion": "failure",
+  "detailsUrl": "https://ci.acme.dev/runs/8842",
+  "externalUpdatedAt": "2026-08-02T14:44:30Z",
+  "startedAt": "2026-08-02T14:40:00Z",
+  "completedAt": "2026-08-02T14:44:30Z",
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T15:02:10Z",
+  "externalId": "run-8842",
+  "actor": {
+    "app": {
+      "id": "app_01k2ja2000e0080000000000a1",
+      "displayName": "Acme CI"
+    }
+  },
+  "output": {
+    "title": "Unit tests",
+    "summary": "3 of 128 tests failed."
+  },
+  "isRerequestable": true,
+  "rerequestedAt": "2026-08-02T15:02:10Z",
+  "rerequestedBy": {
+    "user": {
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
+    }
+  }
+}
+```
+
 ### Get Check Suite
 
 /v1/origin/repos///check-suites/
@@ -6491,7 +7312,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user access token).
 
-Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. A run that has been re-requested is omitted the same way until the app that owns it posts a new attempt or refreshes the existing one with a newer `externalUpdatedAt`. Read an omitted attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
+Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. A run that has been re-requested stays in the listing and reads as pending, with `rerequestedAt` set and its superseded `status` and `conclusion` unchanged, until the app that owns it answers. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
 
 #### Path Parameters
 
@@ -6681,7 +7502,11 @@ Whether the reporting app declared this run re-requestable.
 
 `checkRuns[].rerequestedAt` string
 
-RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`checkRuns[].rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
 `nextPageToken` string
 
@@ -6746,7 +7571,7 @@ curl --request GET \
 
 Requires scope `repository:checks:read` (installation access token or user access token).
 
-Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted, as is a run that has been re-requested, until the app that owns it posts a new attempt or refreshes the existing one with a newer `externalUpdatedAt`. Read an omitted attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
+Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted. A run that has been re-requested stays in the listing and reads as pending, with `rerequestedAt` set and its superseded `status` and `conclusion` unchanged, until the app that owns it answers. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
 
 Filters apply to the collapsed set, so a run matches on its latest attempt's status and a filter never resurfaces a superseded attempt. Page tokens embed the filters they were minted under, so a token replayed under different filters is rejected; restart pagination when a filter changes.
 
@@ -6946,7 +7771,11 @@ Whether the reporting app declared this run re-requestable.
 
 `checkRuns[].rerequestedAt` string
 
-RFC 3339 timestamp of when the run was re-requested. Absent until a re-request, and set at most once per run. A re-requested run is excluded from the commit's latest check state until the app that owns it posts the new run it committed to, and that new run is the re-requestable one.
+RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is pending, and cleared when the app that owns the run posts again. While it is set the run stays in the commit's latest check state and reads as pending, even though `status` and `conclusion` still carry the superseded result, so a required check blocks merging until the app answers.
+
+`checkRuns[].rerequestedBy` object
+
+Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
 `nextPageToken` string
 
@@ -9337,7 +10166,7 @@ Maximum results to return. Defaults to 30; maximum 100.
 
 `pageToken` string
 
-Opaque token from the preceding page.
+Opaque cursor from a previous response's `nextPageToken`. Omit it for the first page.
 
 `author` string
 
@@ -10427,7 +11256,7 @@ Maximum comments to return. Defaults to 30; maximum 100.
 
 `pageToken` string
 
-Opaque token from the preceding page.
+Opaque cursor from a previous response's `nextPageToken`. Omit it for the first page.
 
 `since` string
 
@@ -10605,7 +11434,7 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 
 `nextPageToken` string
 
-Empty when there are no more comments.
+Opaque cursor for the next page; empty when there are no more comments.
 
 ```bash
 curl --request GET \
@@ -12433,7 +13262,7 @@ Maximum reviews to return. Defaults to 30; maximum 100.
 
 `pageToken` string
 
-Opaque token from the preceding page.
+Opaque cursor from a previous response's `nextPageToken`. Omit it for the first page.
 
 #### Response Fields
 
@@ -12619,7 +13448,7 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 
 `nextPageToken` string
 
-Opaque token for the next page; empty when there are no more reviews.
+Opaque cursor for the next page; empty when there are no more reviews.
 
 ```bash
 curl --request GET \
