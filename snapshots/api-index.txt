@@ -77,15 +77,12 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [List Webhook Deliveries](https://cursor.com/docs/api/origin#list-webhook-deliveries)
 - [Batch Redeliver Webhook Deliveries](https://cursor.com/docs/api/origin#batch-redeliver-webhook-deliveries)
 - [Ping Webhook](https://cursor.com/docs/api/origin#ping-webhook)
-
-## Grants
-
-- [List Repository Grants](https://cursor.com/docs/api/origin/grants-api#list-repository-grants)
-- [Upsert Repository Grant](https://cursor.com/docs/api/origin/grants-api#upsert-repository-grant)
-- [Delete Repository Grant](https://cursor.com/docs/api/origin/grants-api#delete-repository-grant)
-- [List Namespace Grants](https://cursor.com/docs/api/origin/grants-api#list-namespace-grants)
-- [Upsert Namespace Grant](https://cursor.com/docs/api/origin/grants-api#upsert-namespace-grant)
-- [Delete Namespace Grant](https://cursor.com/docs/api/origin/grants-api#delete-namespace-grant)
+- [Get App](https://cursor.com/docs/api/origin#get-app)
+- [Update App](https://cursor.com/docs/api/origin#update-app)
+- [Add App Signing Key](https://cursor.com/docs/api/origin#add-app-signing-key)
+- [Revoke App Signing Key](https://cursor.com/docs/api/origin#revoke-app-signing-key)
+- [List Namespace Apps](https://cursor.com/docs/api/origin#list-namespace-apps)
+- [Create App](https://cursor.com/docs/api/origin#create-app)
 
 ## Repositories
 
@@ -136,6 +133,19 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [List Matching Git Refs by Path](https://cursor.com/docs/api/origin#list-matching-git-refs-by-path)
 - [Get Tag](https://cursor.com/docs/api/origin#get-tag)
 - [Get Tree](https://cursor.com/docs/api/origin#get-tree)
+
+## Grants
+
+- [List Repository Grants](https://cursor.com/docs/api/origin#list-repository-grants)
+- [Upsert Repository Grant](https://cursor.com/docs/api/origin#upsert-repository-grant)
+- [Delete Repository Grant](https://cursor.com/docs/api/origin#delete-repository-grant)
+- [List Namespace Grants](https://cursor.com/docs/api/origin#list-namespace-grants)
+- [Upsert Namespace Grant](https://cursor.com/docs/api/origin#upsert-namespace-grant)
+- [Delete Namespace Grant](https://cursor.com/docs/api/origin#delete-namespace-grant)
+
+## Grants concepts
+
+- [Grants concepts](https://cursor.com/docs/api/origin/grants-api)
 
 ## Labels
 

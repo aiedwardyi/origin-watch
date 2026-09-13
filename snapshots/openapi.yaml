@@ -35,6 +35,12 @@ paths:
                                         updatedAt: "2026-08-02T14:45:00Z"
                                         installationRedirectUris:
                                             - https://ci.acme.dev/origin/setup
+                                        namespaceSlug: acme
+                                        description: Posts CI status on pull requests.
+                                        websiteUrl: https://ci.acme.dev
+                                        defaultScopes:
+                                            - repository:contents:read
+                                            - repository:pull_requests:read
                 "401":
                     description: Unauthorized
                     content:
@@ -670,6 +676,391 @@ paths:
                 scopes:
                     - app:webhook_deliveries:write
                 ambient: true
+    /v1/origin/apps/{appId}:
+        get:
+            tags:
+                - OriginService
+            description: |-
+                Returns a single app by its identifier.
+
+                 This is the management read for app publishers; GetAuthenticatedApp is
+                 the equivalent self-read for the app's own JWT credential.
+            operationId: OriginService_GetApp
+            parameters:
+                - name: appId
+                  in: path
+                  description: App identifier.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/App'
+                            examples:
+                                getApp:
+                                    value:
+                                        id: app_01k2ja2000e0080000000000a1
+                                        displayName: CI Status Bot
+                                        webhookUrl: https://ci.acme.dev/webhooks/origin
+                                        events:
+                                            - pull_request.created
+                                            - pull_request.merged
+                                        createdAt: "2026-08-01T09:30:00Z"
+                                        updatedAt: "2026-08-02T14:45:00Z"
+                                        installationRedirectUris:
+                                            - https://ci.acme.dev/origin/setup
+                                        namespaceSlug: acme
+                                        description: Posts CI status on pull requests.
+                                        websiteUrl: https://ci.acme.dev
+                                        defaultScopes:
+                                            - repository:contents:read
+                                            - repository:pull_requests:read
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - app:settings:read
+        patch:
+            tags:
+                - OriginService
+            description: |-
+                Updates an app's settings. Omitted fields are left unchanged; at least
+                 one settable field must be provided.
+
+                 Clearing `webhook_url` (providing it as an empty string) disables
+                 outbound webhook delivery and cancels the app's pending deliveries;
+                 re-setting a URL later does not resurrect cancelled deliveries.
+            operationId: OriginService_UpdateApp
+            parameters:
+                - name: appId
+                  in: path
+                  description: App identifier.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                displayName:
+                                    type: string
+                                    description: New human-facing app name. Must not be empty when provided.
+                                webhookUrl:
+                                    type: string
+                                    description: |-
+                                        New outbound webhook delivery URL: an absolute https URL. Providing an
+                                         empty string disables webhook delivery and cancels the app's pending
+                                         deliveries.
+                                events:
+                                    allOf:
+                                        - $ref: '#/components/schemas/AppEventsReplace'
+                                    description: |-
+                                        Clean replace of the outbound webhook event subscriptions. Absent leaves
+                                         them unchanged; present with an empty list clears them.
+                                description:
+                                    type: string
+                                    description: New app description. Absent leaves it unchanged; empty clears it.
+                                websiteUrl:
+                                    type: string
+                                    description: New publisher website. Absent leaves it unchanged; empty clears it.
+                                installationRedirectUris:
+                                    allOf:
+                                        - $ref: '#/components/schemas/AppInstallationRedirectUrisReplace'
+                                    description: |-
+                                        Clean replace of the OAuth install callback allowlist. Absent leaves it
+                                         unchanged; present with an empty list clears it.
+                                defaultScopes:
+                                    allOf:
+                                        - $ref: '#/components/schemas/AppDefaultScopesReplace'
+                                    description: |-
+                                        Clean replace of the app's default install scopes. Absent leaves them
+                                         unchanged; present with an empty list clears them.
+                        examples:
+                            updateApp:
+                                value:
+                                    webhookUrl: https://ci.acme.dev/webhooks/origin-v2
+                                    events:
+                                        events:
+                                            - pull_request.created
+                                            - pull_request.merged
+                                            - repository.pushed
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/App'
+                            examples:
+                                updateApp:
+                                    value:
+                                        id: app_01k2ja2000e0080000000000a1
+                                        displayName: CI Status Bot
+                                        webhookUrl: https://ci.acme.dev/webhooks/origin-v2
+                                        events:
+                                            - pull_request.created
+                                            - pull_request.merged
+                                            - repository.pushed
+                                        createdAt: "2026-08-01T09:30:00Z"
+                                        updatedAt: "2026-08-02T14:45:00Z"
+                                        installationRedirectUris:
+                                            - https://ci.acme.dev/origin/setup
+                                        namespaceSlug: acme
+                                        description: Posts CI status on pull requests.
+                                        websiteUrl: https://ci.acme.dev
+                                        defaultScopes:
+                                            - repository:contents:read
+                                            - repository:pull_requests:read
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - app:settings:write
+    /v1/origin/apps/{appId}/signing_keys:
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Adds a signing key to an app.
+
+                 Apps hold a bounded set of active signing keys; adding a key beyond the
+                 limit is rejected with a failed-precondition error until another key is
+                 revoked. A key that is already registered is rejected with an
+                 already-exists error.
+            operationId: OriginService_AddAppSigningKey
+            parameters:
+                - name: appId
+                  in: path
+                  description: App identifier.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - publicKey
+                            type: object
+                            properties:
+                                publicKey:
+                                    type: string
+                                    description: PEM SPKI Ed25519 public key to add to the app's signing key set.
+                        examples:
+                            addAppSigningKey:
+                                value:
+                                    publicKey: |-
+                                        -----BEGIN PUBLIC KEY-----
+                                        MCowBQYDK2VwAyEAq9zTf3hL6wXe1cVj0bYs5mKR8uDnG2oAaPp4NiEkKlM=
+                                        -----END PUBLIC KEY-----
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AppSigningKey'
+                            examples:
+                                addAppSigningKey:
+                                    value:
+                                        kid: 3q2xW9dK5fJm8vB1nY6cT0aZrQpLh4eGkVsN7uMxOdI
+                                        createdAt: "2026-08-02T14:45:00Z"
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "409":
+                    description: The request conflicts with the current state of the resource.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - app:settings:write
+    /v1/origin/apps/{appId}/signing_keys/{kid}:
+        delete:
+            tags:
+                - OriginService
+            description: |-
+                Revokes an app signing key by its key ID.
+
+                 JWTs signed with a revoked key stop authenticating. The last active
+                 signing key cannot be revoked; the request is rejected with a
+                 failed-precondition error.
+            operationId: OriginService_RevokeAppSigningKey
+            parameters:
+                - name: appId
+                  in: path
+                  description: App identifier.
+                  required: true
+                  schema:
+                    type: string
+                - name: kid
+                  in: path
+                  description: Key ID of the signing key to revoke.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: OK
+                    content: {}
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - app:settings:write
     /v1/origin/installation/repos:
         get:
             tags:
@@ -756,6 +1147,542 @@ paths:
                 scopes:
                     - installation:metadata:read
                 ambient: true
+    /v1/origin/namespaces/{namespaceSlug}/apps:
+        get:
+            tags:
+                - OriginService
+            description: Lists apps owned by a namespace, ordered by creation time descending.
+            operationId: OriginService_ListNamespaceApps
+            parameters:
+                - name: namespaceSlug
+                  in: path
+                  description: Slug of the namespace whose apps to list.
+                  required: true
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  description: |-
+                    Max apps to return. Defaults to 30 when unset or 0. Values above 100 are
+                     clamped to 100.
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  description: |-
+                    Opaque cursor from a previous response's `next_page_token`. Empty for the
+                     first page.
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListNamespaceAppsResponse'
+                            examples:
+                                listNamespaceApps:
+                                    value:
+                                        apps:
+                                            - id: app_01k2ja2000e0080000000000a1
+                                              displayName: CI Status Bot
+                                              description: Posts CI status on pull requests.
+                                            - id: app_01k2ja2000e0080000000000a2
+                                              displayName: Deploy Bot
+                                              description: ""
+                                        nextPageToken: ""
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - namespace:apps:read
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Creates an app owned by a namespace.
+
+                 Apps are created private. `public_key` must be a PEM SPKI Ed25519 public
+                 key; the caller generates the key pair locally and retains the private
+                 key, and only the public key is stored, for app JWT verification.
+                 Invalid webhook URLs, event types, redirect URIs, or scopes are rejected
+                 as invalid arguments.
+            operationId: OriginService_CreateApp
+            parameters:
+                - name: namespaceSlug
+                  in: path
+                  description: Slug of the namespace that will own the app.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - displayName
+                                - publicKey
+                            type: object
+                            properties:
+                                displayName:
+                                    type: string
+                                    description: Human-facing app name. Must not be empty.
+                                publicKey:
+                                    type: string
+                                    description: |-
+                                        PEM SPKI Ed25519 public key for the app's signing key pair. The caller
+                                         generates the key pair locally and retains the private key; only the
+                                         public key is stored, for app JWT verification.
+                                webhookUrl:
+                                    type: string
+                                    description: |-
+                                        Outbound webhook delivery URL: an absolute https URL. Empty means the app
+                                         receives no webhook deliveries.
+                                events:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Outbound webhook event subscriptions (for example `pull_request.created`
+                                         or `repository.pushed`). Unknown event types are rejected.
+                                description:
+                                    type: string
+                                    description: Short app description.
+                                websiteUrl:
+                                    type: string
+                                    description: 'Publisher website: an absolute https URL.'
+                                installationRedirectUris:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        OAuth install callback allowlist: redirect URIs an app-initiated install
+                                         may return to (absolute https URI, no fragment), matched exactly at
+                                         authorize time.
+                                defaultScopes:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Default scopes offered when the app is installed, as catalog scope
+                                         strings (for example `repository:contents:read`). Installs still accept
+                                         scopes explicitly.
+                        examples:
+                            createApp:
+                                value:
+                                    displayName: CI Status Bot
+                                    publicKey: |-
+                                        -----BEGIN PUBLIC KEY-----
+                                        MCowBQYDK2VwAyEAv7wFoV1bC9yKq3nZ8dQmXh5uJb2tR4sEwG6aP0iN8kY=
+                                        -----END PUBLIC KEY-----
+                                    webhookUrl: https://ci.acme.dev/webhooks/origin
+                                    events:
+                                        - pull_request.created
+                                        - pull_request.merged
+                                    description: Posts CI status on pull requests.
+                                    websiteUrl: https://ci.acme.dev
+                                    installationRedirectUris:
+                                        - https://ci.acme.dev/origin/setup
+                                    defaultScopes:
+                                        - repository:contents:read
+                                        - repository:pull_requests:read
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/App'
+                            examples:
+                                createApp:
+                                    value:
+                                        id: app_01k2ja2000e0080000000000a1
+                                        displayName: CI Status Bot
+                                        webhookUrl: https://ci.acme.dev/webhooks/origin
+                                        events:
+                                            - pull_request.created
+                                            - pull_request.merged
+                                        createdAt: "2026-08-01T09:30:00Z"
+                                        updatedAt: "2026-08-01T09:30:00Z"
+                                        installationRedirectUris:
+                                            - https://ci.acme.dev/origin/setup
+                                        namespaceSlug: acme
+                                        description: Posts CI status on pull requests.
+                                        websiteUrl: https://ci.acme.dev
+                                        defaultScopes:
+                                            - repository:contents:read
+                                            - repository:pull_requests:read
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - user
+                scopes:
+                    - namespace:apps:create
+    /v1/origin/owners/{ownerSlug}/grants:
+        get:
+            tags:
+                - OriginService
+            description: |-
+                Lists who has been granted access to an owner: users, groups, and the
+                 owning team's built-in admin and member groups. Each grant carries the
+                 permission it confers on every repository under the owner. Grants made on
+                 individual repositories are not included; see `ListRepositoryGrants`.
+                 Requires the `namespace:settings:read` scope. Paginated with `page_size`
+                 and `page_token`; default page size is 30, maximum is 100.
+            operationId: OriginService_ListNamespaceGrants
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Slug of the owner whose grants to list.
+                  required: true
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  description: |-
+                    Max grants to return. Defaults to 30 when unset or 0. Values above 100
+                     are clamped to 100. Ignored when `page_token` is set.
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  description: |-
+                    Opaque cursor from a previous response's `next_page_token`. Empty for the
+                     first page.
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListNamespaceGrantsResponse'
+                            examples:
+                                listNamespaceGrants:
+                                    value:
+                                        grants:
+                                            - group:
+                                                id: grp_01k2ja2000e0080000000000n2
+                                              permission: PERMISSION_ADMIN
+                                            - teamGroup:
+                                                kind: admins
+                                              permission: PERMISSION_ADMIN
+                                            - teamGroup:
+                                                kind: members
+                                              permission: PERMISSION_CONTRIBUTOR
+                                            - user:
+                                                id: user_01k2ja2000e0080000000000c3
+                                                email: jane@acme.dev
+                                              permission: PERMISSION_WRITE
+                                        nextPageToken: ""
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - namespace:settings:read
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Sets the permission a user, group, or owning-team group holds directly on
+                 an owner, replacing any permission previously granted directly to that
+                 principal. Repeating a grant the principal already holds succeeds without
+                 change. Only the four presets are accepted; `PERMISSION_CUSTOM` fails with
+                 INVALID_ARGUMENT. A user must be an active member of the owning team or
+                 its organization and a group an active group of that organization, and the
+                 write must leave the owner with at least one admin; otherwise the request
+                 fails with FAILED_PRECONDITION.
+            operationId: OriginService_UpsertNamespaceGrant
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owner slug.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - permission
+                            type: object
+                            properties:
+                                user:
+                                    $ref: '#/components/schemas/OriginUserActor'
+                                group:
+                                    $ref: '#/components/schemas/OriginGroup'
+                                teamGroup:
+                                    $ref: '#/components/schemas/OriginTeamGroup'
+                                permission:
+                                    enum:
+                                        - PERMISSION_READ
+                                        - PERMISSION_CONTRIBUTOR
+                                        - PERMISSION_WRITE
+                                        - PERMISSION_ADMIN
+                                        - PERMISSION_CUSTOM
+                                    type: string
+                                    description: |-
+                                        `PERMISSION_READ`, `PERMISSION_CONTRIBUTOR`, `PERMISSION_WRITE`, or
+                                         `PERMISSION_ADMIN`.
+                                    format: enum
+                        examples:
+                            upsertNamespaceGrant:
+                                value:
+                                    user:
+                                        id: user_01k2ja2000e0080000000000c3
+                                    permission: PERMISSION_WRITE
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NamespaceGrant'
+                            examples:
+                                upsertNamespaceGrant:
+                                    value:
+                                        user:
+                                            id: user_01k2ja2000e0080000000000c3
+                                            email: jane@acme.dev
+                                        permission: PERMISSION_WRITE
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - namespace:settings:write
+        delete:
+            tags:
+                - OriginService
+            description: |-
+                Removes the permission a user, group, or owning-team group holds directly
+                 on an owner. Per-repository grants are unaffected. Removing a permission
+                 the principal does not hold directly succeeds without change; a removal
+                 that would leave the owner without an admin fails with
+                 FAILED_PRECONDITION.
+            operationId: OriginService_DeleteNamespaceGrant
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owner slug.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user:
+                                    $ref: '#/components/schemas/OriginUserActor'
+                                group:
+                                    $ref: '#/components/schemas/OriginGroup'
+                                teamGroup:
+                                    $ref: '#/components/schemas/OriginTeamGroup'
+                        examples:
+                            deleteNamespaceGrant:
+                                value:
+                                    group:
+                                        id: grp_01k2ja2000e0080000000000n2
+                required: true
+            responses:
+                "204":
+                    description: OK
+                    content: {}
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - namespace:settings:write
     /v1/origin/rate_limit:
         get:
             tags:
@@ -4361,6 +5288,316 @@ paths:
                     - user
                 scopes:
                     - repository:contents:read
+    /v1/origin/repos/{ownerSlug}/{repoName}/grants:
+        get:
+            tags:
+                - OriginService
+            description: |-
+                Lists the users, groups, and owning-team groups holding a permission
+                 granted directly on a repository. Permissions inherited from the
+                 repository's owner are not included. Paginated with `page_size` and
+                 `page_token`; default page size is 30, maximum is 100.
+            operationId: OriginService_ListRepositoryGrants
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: repoName
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  description: |-
+                    Max grants to return. Defaults to 30 when unset or 0. Values above 100
+                     are clamped to 100. Ignored when `page_token` is set.
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  description: |-
+                    Opaque cursor from a previous response's `next_page_token`. Empty for the
+                     first page.
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRepositoryGrantsResponse'
+                            examples:
+                                listRepositoryGrants:
+                                    value:
+                                        grants:
+                                            - group:
+                                                id: grp_01k2ja2000e0080000000000n2
+                                              permission: admin
+                                            - teamGroup:
+                                                kind: admins
+                                              permission: admin
+                                            - teamGroup:
+                                                kind: members
+                                              permission: write
+                                            - user:
+                                                id: user_01k2ja2000e0080000000000c3
+                                                email: jane@acme.dev
+                                              permission: read
+                                        repository:
+                                            id: repo_01k2ja2000e0080000000000q4
+                                            name: rocket
+                                            owner:
+                                                slug: acme
+                                                id: ns_01k2ja2000e0080000000000p3
+                                                type: team
+                                        nextPageToken: ""
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - repository:settings:read
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Sets the permission a user, group, or owning-team group holds directly on
+                 a repository, replacing any permission previously granted directly to that
+                 principal. Repeating a grant the principal already holds succeeds without
+                 change. Only `read`, `write`, and `admin` are accepted; `custom` fails with
+                 INVALID_ARGUMENT. A user must be an active member of the repository
+                 owner's team or organization and a group an active group of that
+                 organization; otherwise the request fails with FAILED_PRECONDITION.
+            operationId: OriginService_UpsertRepositoryGrant
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: repoName
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            required:
+                                - permission
+                            type: object
+                            properties:
+                                user:
+                                    $ref: '#/components/schemas/OriginUserActor'
+                                group:
+                                    $ref: '#/components/schemas/OriginGroup'
+                                teamGroup:
+                                    $ref: '#/components/schemas/OriginTeamGroup'
+                                permission:
+                                    enum:
+                                        - read
+                                        - write
+                                        - admin
+                                        - custom
+                                    type: string
+                                    description: '`read`, `write`, or `admin`.'
+                                    format: enum
+                        examples:
+                            upsertRepositoryGrant:
+                                value:
+                                    user:
+                                        id: user_01k2ja2000e0080000000000c3
+                                    permission: write
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RepositoryGrant'
+                            examples:
+                                upsertRepositoryGrant:
+                                    value:
+                                        user:
+                                            id: user_01k2ja2000e0080000000000c3
+                                            email: jane@acme.dev
+                                        permission: write
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - repository:settings:write
+        delete:
+            tags:
+                - OriginService
+            description: |-
+                Removes the permission a user, group, or owning-team group holds directly
+                 on a repository. Permissions inherited from the repository's owner are
+                 unaffected, so an owning-team group falls back to its owner-level default.
+                 Removing a permission the principal does not hold directly succeeds
+                 without change.
+            operationId: OriginService_DeleteRepositoryGrant
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: repoName
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user:
+                                    $ref: '#/components/schemas/OriginUserActor'
+                                group:
+                                    $ref: '#/components/schemas/OriginGroup'
+                                teamGroup:
+                                    $ref: '#/components/schemas/OriginTeamGroup'
+                        examples:
+                            deleteRepositoryGrant:
+                                value:
+                                    group:
+                                        id: grp_01k2ja2000e0080000000000n2
+                required: true
+            responses:
+                "204":
+                    description: OK
+                    content: {}
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - repository:settings:write
     /v1/origin/repos/{ownerSlug}/{repoName}/labels:
         get:
             tags:
@@ -9096,6 +10333,18 @@ paths:
                     - repository:contents:read
 components:
     schemas:
+        AddAppSigningKeyRequest:
+            required:
+                - appId
+                - publicKey
+            type: object
+            properties:
+                appId:
+                    type: string
+                    description: App identifier.
+                publicKey:
+                    type: string
+                    description: PEM SPKI Ed25519 public key to add to the app's signing key set.
         AddPullRequestLabelsRequest:
             required:
                 - identifier
@@ -9154,7 +10403,60 @@ components:
                     description: |-
                         OAuth install callback allowlist: redirect URIs an app-initiated install
                          may return to, matched exactly at authorize time.
+                namespaceSlug:
+                    readOnly: true
+                    type: string
+                    description: Slug of the namespace that owns (publishes) the app.
+                description:
+                    readOnly: true
+                    type: string
+                    description: Publisher-provided app description. Empty when unset.
+                websiteUrl:
+                    readOnly: true
+                    type: string
+                    description: Publisher website. Empty when unset.
+                defaultScopes:
+                    readOnly: true
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Default scopes offered when the app is installed, as catalog scope
+                         strings.
             description: An Origin app.
+        AppDefaultScopesReplace:
+            type: object
+            properties:
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The app's complete new set of default install scopes.
+            description: Clean-replace wrapper for `UpdateAppRequest.default_scopes`.
+        AppDisplayMetadata:
+            type: object
+            properties:
+                id:
+                    readOnly: true
+                    type: string
+                    description: Globally unique app identifier.
+                displayName:
+                    readOnly: true
+                    type: string
+                description:
+                    readOnly: true
+                    type: string
+                    description: Publisher-provided description. Empty when unset.
+            description: Non-sensitive display fields for an app in a namespace catalog.
+        AppEventsReplace:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        type: string
+                    description: The app's complete new set of webhook event subscriptions.
+            description: Clean-replace wrapper for `UpdateAppRequest.events`.
         AppInstallation:
             type: object
             properties:
@@ -9200,7 +10502,45 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/OriginUserActor'
                     description: User who originally installed the app.
+                suspendedAt:
+                    readOnly: true
+                    type: string
+                    description: Set while the installation is suspended; unset when it is active.
+                    format: date-time
+                deletedAt:
+                    readOnly: true
+                    type: string
+                    description: |-
+                        When the installation was deleted. Set only on the `installation.deleted`
+                         webhook snapshot; a deleted installation no longer resolves through the
+                         API.
+                    format: date-time
             description: An installation of an Origin app into a target owner entity.
+        AppInstallationRedirectUrisReplace:
+            type: object
+            properties:
+                installationRedirectUris:
+                    type: array
+                    items:
+                        type: string
+                    description: The app's complete new OAuth install callback allowlist.
+            description: Clean-replace wrapper for `UpdateAppRequest.installation_redirect_uris`.
+        AppSigningKey:
+            type: object
+            properties:
+                kid:
+                    readOnly: true
+                    type: string
+                    description: |-
+                        Key ID: the base64url-encoded SHA-256 digest of the key's SPKI DER
+                         encoding.
+                createdAt:
+                    readOnly: true
+                    type: string
+                    format: date-time
+            description: |-
+                An app signing key. Only the key's identity is returned; the key material
+                 is write-only.
         BatchGetContentsRequest:
             required:
                 - identifier
@@ -10192,6 +11532,59 @@ components:
                  For a file (`type` = "file"): `encoding` and `content` are populated
                  (base64). For a directory (`type` = "dir"): `entries` lists immediate
                  children.
+        CreateAppRequest:
+            required:
+                - namespaceSlug
+                - displayName
+                - publicKey
+            type: object
+            properties:
+                namespaceSlug:
+                    type: string
+                    description: Slug of the namespace that will own the app.
+                displayName:
+                    type: string
+                    description: Human-facing app name. Must not be empty.
+                publicKey:
+                    type: string
+                    description: |-
+                        PEM SPKI Ed25519 public key for the app's signing key pair. The caller
+                         generates the key pair locally and retains the private key; only the
+                         public key is stored, for app JWT verification.
+                webhookUrl:
+                    type: string
+                    description: |-
+                        Outbound webhook delivery URL: an absolute https URL. Empty means the app
+                         receives no webhook deliveries.
+                events:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Outbound webhook event subscriptions (for example `pull_request.created`
+                         or `repository.pushed`). Unknown event types are rejected.
+                description:
+                    type: string
+                    description: Short app description.
+                websiteUrl:
+                    type: string
+                    description: 'Publisher website: an absolute https URL.'
+                installationRedirectUris:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        OAuth install callback allowlist: redirect URIs an app-initiated install
+                         may return to (absolute https URI, no fragment), matched exactly at
+                         authorize time.
+                defaultScopes:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Default scopes offered when the app is installed, as catalog scope
+                         strings (for example `repository:contents:read`). Installs still accept
+                         scopes explicitly.
         CreateCheckRunAnnotationsRequest:
             required:
                 - identifier
@@ -10534,6 +11927,33 @@ components:
                 labelName:
                     type: string
                     description: Label name. Leading and trailing whitespace is trimmed before lookup.
+        DeleteNamespaceGrantRequest:
+            required:
+                - ownerSlug
+            type: object
+            properties:
+                ownerSlug:
+                    type: string
+                    description: Owner slug.
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    $ref: '#/components/schemas/OriginTeamGroup'
+        DeleteRepositoryGrantRequest:
+            required:
+                - identifier
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    $ref: '#/components/schemas/OriginTeamGroup'
         DeleteRulesetRequest:
             required:
                 - identifier
@@ -10628,6 +12048,14 @@ components:
                 installationId:
                     type: string
                     description: Installation identifier.
+        GetAppRequest:
+            required:
+                - appId
+            type: object
+            properties:
+                appId:
+                    type: string
+                    description: App identifier.
         GetAuthenticatedAppRequest:
             type: object
             properties: {}
@@ -11056,6 +12484,7 @@ components:
             example:
                 installation:
                     id: inst_01k2ja2000e0080000000000b2
+                    appId: app_01k2ja2000e0080000000000a1
                     target:
                         slug: acme
                         id: ns_01k2ja2000e0080000000000p3
@@ -11073,6 +12502,7 @@ components:
                         - repository:pull_requests:read
                     repositoriesCount: 1
                     createdAt: "2026-08-01T09:30:00Z"
+                    updatedAt: "2026-08-01T09:30:00Z"
                     installedBy:
                         id: user_01k2ja2000e0080000000000c3
                         email: jane@acme.dev
@@ -11095,6 +12525,7 @@ components:
             example:
                 installation:
                     id: inst_01k2ja2000e0080000000000b2
+                    appId: app_01k2ja2000e0080000000000a1
                     target:
                         slug: acme
                         id: ns_01k2ja2000e0080000000000p3
@@ -11147,6 +12578,7 @@ components:
             example:
                 installation:
                     id: inst_01k2ja2000e0080000000000b2
+                    appId: app_01k2ja2000e0080000000000a1
                     target:
                         slug: acme
                         id: ns_01k2ja2000e0080000000000p3
@@ -11187,6 +12619,7 @@ components:
             example:
                 installation:
                     id: inst_01k2ja2000e0080000000000b2
+                    appId: app_01k2ja2000e0080000000000a1
                     target:
                         slug: acme
                         id: ns_01k2ja2000e0080000000000p3
@@ -11226,6 +12659,7 @@ components:
             example:
                 installation:
                     id: inst_01k2ja2000e0080000000000b2
+                    appId: app_01k2ja2000e0080000000000a1
                     target:
                         slug: acme
                         id: ns_01k2ja2000e0080000000000p3
@@ -11243,6 +12677,7 @@ components:
                         - repository:pull_requests:read
                     repositoriesCount: 1
                     createdAt: "2026-08-01T09:30:00Z"
+                    updatedAt: "2026-08-02T14:45:00Z"
                     installedBy:
                         id: user_01k2ja2000e0080000000000c3
                         email: jane@acme.dev
@@ -11657,6 +13092,70 @@ components:
                     items:
                         $ref: '#/components/schemas/GitRef'
                     description: Matching refs, sorted by full ref name.
+        ListNamespaceAppsRequest:
+            required:
+                - namespaceSlug
+            type: object
+            properties:
+                namespaceSlug:
+                    type: string
+                    description: Slug of the namespace whose apps to list.
+                pageSize:
+                    type: integer
+                    description: |-
+                        Max apps to return. Defaults to 30 when unset or 0. Values above 100 are
+                         clamped to 100.
+                    format: int32
+                pageToken:
+                    type: string
+                    description: |-
+                        Opaque cursor from a previous response's `next_page_token`. Empty for the
+                         first page.
+        ListNamespaceAppsResponse:
+            type: object
+            properties:
+                apps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AppDisplayMetadata'
+                nextPageToken:
+                    type: string
+                    description: Opaque cursor for the next page; empty when there are no more pages.
+        ListNamespaceGrantsRequest:
+            required:
+                - ownerSlug
+            type: object
+            properties:
+                ownerSlug:
+                    type: string
+                    description: Slug of the owner whose grants to list.
+                pageSize:
+                    type: integer
+                    description: |-
+                        Max grants to return. Defaults to 30 when unset or 0. Values above 100
+                         are clamped to 100. Ignored when `page_token` is set.
+                    format: int32
+                pageToken:
+                    type: string
+                    description: |-
+                        Opaque cursor from a previous response's `next_page_token`. Empty for the
+                         first page.
+        ListNamespaceGrantsResponse:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/NamespaceGrant'
+                    description: |-
+                        Grants on this page. Admin grants are listed before all others; within
+                         each of those two runs, grants are ordered by principal kind (groups,
+                         owning-team admins, owning-team members, users) and then by id. Grants
+                         whose user, group, or owning team no longer exists are omitted, so a page
+                         may hold fewer than `page_size` grants.
+                nextPageToken:
+                    type: string
+                    description: Opaque cursor for the next page; empty when there are no more pages.
         ListPullRequestCommentsRequest:
             required:
                 - identifier
@@ -11948,6 +13447,44 @@ components:
                 nextPageToken:
                     type: string
                     description: Opaque cursor for the next page; empty when there are no more pages.
+        ListRepositoryGrantsRequest:
+            required:
+                - identifier
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                pageSize:
+                    type: integer
+                    description: |-
+                        Max grants to return. Defaults to 30 when unset or 0. Values above 100
+                         are clamped to 100. Ignored when `page_token` is set.
+                    format: int32
+                pageToken:
+                    type: string
+                    description: |-
+                        Opaque cursor from a previous response's `next_page_token`. Empty for the
+                         first page.
+        ListRepositoryGrantsResponse:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RepositoryGrant'
+                    description: |-
+                        Ordered by principal kind (groups, owning-team admins, owning-team
+                         members, users), then by id. Principals that no longer resolve to an active
+                         user, group, or owning team are omitted, so a page may hold fewer than
+                         `page_size` grants.
+                repository:
+                    readOnly: true
+                    allOf:
+                        - $ref: '#/components/schemas/RepositoryReference'
+                    description: Repository shared by every grant in this response.
+                nextPageToken:
+                    type: string
+                    description: Opaque cursor for the next page; empty when there are no more pages.
         ListRulesetsRequest:
             required:
                 - identifier
@@ -12151,6 +13688,34 @@ components:
                 An asynchronous job tracking one mirror transition. Jobs are created by
                  starting a transition or forcing a cutover, and are polled until they reach
                  a terminal status.
+        NamespaceGrant:
+            type: object
+            properties:
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginTeamGroup'
+                    description: A built-in group of the owning team.
+                permission:
+                    enum:
+                        - PERMISSION_READ
+                        - PERMISSION_CONTRIBUTOR
+                        - PERMISSION_WRITE
+                        - PERMISSION_ADMIN
+                        - PERMISSION_CUSTOM
+                    type: string
+                    description: Permission the principal holds on every repository under the owner.
+                    format: enum
+            description: |-
+                One grant of access to an owner: the principal that holds it and the
+                 permission it confers on every repository under that owner. The principal is
+                 a user, a group, or one of the owning team's built-in groups (all team
+                 admins, or all team members). Grants to the built-in team groups are the
+                 team's default access to the owner and are set through
+                 `UpsertNamespaceGrant` and `DeleteNamespaceGrant` like any other grant.
         OriginActor:
             type: object
             properties:
@@ -12183,6 +13748,20 @@ components:
             properties:
                 id:
                     type: string
+        OriginTeamGroup:
+            type: object
+            properties:
+                kind:
+                    enum:
+                        - members
+                        - admins
+                    type: string
+                    format: enum
+            description: |-
+                A fixed group of the team that owns a repository or an owner: every team
+                 member or every team admin. These are the owning team's default access
+                 shelves, granted on the resource itself; a repository's team-group grant is
+                 distinct from the one inherited from its owner.
         OriginUserActor:
             required:
                 - email
@@ -13017,6 +14596,26 @@ components:
                         id: ns_01k2ja2000e0080000000000p3
                         type: team
                 deletedAt: "2026-08-03T08:15:00Z"
+        RepositoryGrant:
+            type: object
+            properties:
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    $ref: '#/components/schemas/OriginTeamGroup'
+                permission:
+                    enum:
+                        - read
+                        - write
+                        - admin
+                        - custom
+                    type: string
+                    format: enum
+            description: |-
+                A permission granted directly on a repository to one user, group, or
+                 owning-team group.
         RepositoryMetadataUpdatedWebhookPayload:
             type: object
             properties:
@@ -13259,6 +14858,18 @@ components:
                  reviewed version's diff, `file` to open a new file-level thread, or
                  neither to open a new general-discussion thread. Every comment publishes
                  with the review.
+        RevokeAppSigningKeyRequest:
+            required:
+                - appId
+                - kid
+            type: object
+            properties:
+                appId:
+                    type: string
+                    description: App identifier.
+                kid:
+                    type: string
+                    description: Key ID of the signing key to revoke.
         Ruleset:
             type: object
             properties:
@@ -13618,6 +15229,47 @@ components:
                     description: |-
                         The job tracking the transition. Poll it until it reaches a terminal
                          status.
+        UpdateAppRequest:
+            required:
+                - appId
+            type: object
+            properties:
+                appId:
+                    type: string
+                    description: App identifier.
+                displayName:
+                    type: string
+                    description: New human-facing app name. Must not be empty when provided.
+                webhookUrl:
+                    type: string
+                    description: |-
+                        New outbound webhook delivery URL: an absolute https URL. Providing an
+                         empty string disables webhook delivery and cancels the app's pending
+                         deliveries.
+                events:
+                    allOf:
+                        - $ref: '#/components/schemas/AppEventsReplace'
+                    description: |-
+                        Clean replace of the outbound webhook event subscriptions. Absent leaves
+                         them unchanged; present with an empty list clears them.
+                description:
+                    type: string
+                    description: New app description. Absent leaves it unchanged; empty clears it.
+                websiteUrl:
+                    type: string
+                    description: New publisher website. Absent leaves it unchanged; empty clears it.
+                installationRedirectUris:
+                    allOf:
+                        - $ref: '#/components/schemas/AppInstallationRedirectUrisReplace'
+                    description: |-
+                        Clean replace of the OAuth install callback allowlist. Absent leaves it
+                         unchanged; present with an empty list clears it.
+                defaultScopes:
+                    allOf:
+                        - $ref: '#/components/schemas/AppDefaultScopesReplace'
+                    description: |-
+                        Clean replace of the app's default install scopes. Absent leaves them
+                         unchanged; present with an empty list clears them.
         UpdateLabelRequest:
             required:
                 - identifier
@@ -13820,6 +15472,56 @@ components:
             description: |-
                 Same configuration body as `CreateRulesetRequest`, plus the ruleset id on
                  the path. Nested rules and bypass actors are fully replaced.
+        UpsertNamespaceGrantRequest:
+            required:
+                - ownerSlug
+                - permission
+            type: object
+            properties:
+                ownerSlug:
+                    type: string
+                    description: Owner slug.
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    $ref: '#/components/schemas/OriginTeamGroup'
+                permission:
+                    enum:
+                        - PERMISSION_READ
+                        - PERMISSION_CONTRIBUTOR
+                        - PERMISSION_WRITE
+                        - PERMISSION_ADMIN
+                        - PERMISSION_CUSTOM
+                    type: string
+                    description: |-
+                        `PERMISSION_READ`, `PERMISSION_CONTRIBUTOR`, `PERMISSION_WRITE`, or
+                         `PERMISSION_ADMIN`.
+                    format: enum
+        UpsertRepositoryGrantRequest:
+            required:
+                - identifier
+                - permission
+            type: object
+            properties:
+                identifier:
+                    $ref: '#/components/schemas/RepoIdentifier'
+                user:
+                    $ref: '#/components/schemas/OriginUserActor'
+                group:
+                    $ref: '#/components/schemas/OriginGroup'
+                teamGroup:
+                    $ref: '#/components/schemas/OriginTeamGroup'
+                permission:
+                    enum:
+                        - read
+                        - write
+                        - admin
+                        - custom
+                    type: string
+                    description: '`read`, `write`, or `admin`.'
+                    format: enum
         WebhookApp:
             type: object
             properties:
@@ -13920,6 +15622,9 @@ components:
             properties:
                 id:
                     type: string
+                appId:
+                    type: string
+                    description: The installed app's identifier; the same value as `app.id` on the payload.
                 target:
                     $ref: '#/components/schemas/Owner'
                 repoSelectionMode:
@@ -13946,6 +15651,9 @@ components:
                 createdAt:
                     type: string
                     format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
                 deletedAt:
                     type: string
                     format: date-time
@@ -13957,6 +15665,12 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/OriginUserActor'
                     description: User who originally installed the app.
+            description: |-
+                The installation snapshot delivered with `installation.*` events: the fields
+                 of `AppInstallation` (same names and types, so an `AppInstallation` decoder
+                 reads it) plus the inline `repositories` snapshot that the API serves
+                 separately through `ListAppInstallationRepositories`. `created_at` and
+                 `updated_at` are present on the events that carry them.
     securitySchemes:
         bearerAuth:
             type: http
