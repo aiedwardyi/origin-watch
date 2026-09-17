@@ -12,12 +12,12 @@ The Origin CLI (`origin`) is separate from the Cursor Agent CLI (`agent`) docume
 
 These work with any command:
 
-| Option         | Description                                                                   |
-| -------------- | ----------------------------------------------------------------------------- |
-| `--auth-token` | Cursor auth token, used directly as a bearer token (also `CURSOR_AUTH_TOKEN`) |
-| `--endpoint`   | API server endpoint (default: `https://origin.cursor.com`)                    |
-| `--version`    | Show the installed version                                                    |
-| `--help`       | Show help for the current command                                             |
+| Option      | Description                       |
+| ----------- | --------------------------------- |
+| `--version` | Show the installed version        |
+| `--help`    | Show help for the current command |
+
+The CLI reads the API endpoint and the bearer token from the environment, as `CURSOR_ORIGIN_ENDPOINT` and `CURSOR_AUTH_TOKEN`. See [Environment variables](https://cursor.com/docs/origin/cli/reference/commands.md#environment-variables).
 
 ## Command groups
 
@@ -25,7 +25,6 @@ These work with any command:
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
 | `auth`                                                                | Sign in, sign out, and configure git authentication                                | `origin auth login`                |
 | `repo`                                                                | Create, list, view, clone, and delete repositories                                 | `origin repo create my-project`    |
-| `push`                                                                | Push `origin/*` workspace branches on a GitHub-mirrored repo                       | `origin push local`                |
 | [`pr`](https://cursor.com/docs/origin/cli/reference/pull-requests.md) | Create, review, and merge pull requests                                            | `origin pr create`                 |
 | `ruleset`                                                             | View Origin rulesets (merge-time and push-time). Alias: `rs`                       | `origin ruleset list`              |
 | `ssh-key`                                                             | Manage SSH keys registered with your Origin account                                | `origin ssh-key list`              |
@@ -53,13 +52,15 @@ Manage your session and the git credential helper.
 | `status`    | Show the current authentication method and account        | `origin auth status`    |
 | `logout`    | Clear stored credentials                                  | `origin auth logout`    |
 
-| Command     | Option            | Description                                                                                                                     |
-| ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `login`     | `--api-key <key>` | Sign in with an API key instead of the browser flow. When `CURSOR_API_KEY` is set, `origin auth login` uses it without the flag |
-| `login`     | `--local`         | Configure the credential helper in this repository's git config instead of globally                                             |
-| `setup-git` | `--host <host>`   | Origin git host to configure (default: derived from `--endpoint` / `CURSOR_ORIGIN_ENDPOINT`)                                    |
-| `setup-git` | `--global`        | Apply to the global git config (default: `true`)                                                                                |
-| `setup-git` | `--local`         | Apply to this repository's git config instead of the global one                                                                 |
+| Command     | Option            | Description                                                                         |
+| ----------- | ----------------- | ----------------------------------------------------------------------------------- |
+| `login`     | `--api-key <key>` | Sign in with an API key instead of the browser flow                                 |
+| `login`     | `--local`         | Configure the credential helper in this repository's git config instead of globally |
+| `setup-git` | `--host <host>`   | Origin git host to configure (default: derived from `CURSOR_ORIGIN_ENDPOINT`)       |
+| `setup-git` | `--global`        | Apply to the global git config (default: `true`)                                    |
+| `setup-git` | `--local`         | Apply to this repository's git config instead of the global one                     |
+
+When `CURSOR_API_KEY` is set and you omit `--api-key`, `origin auth login` asks `Log in with this API key instead of the browser? [y/N]` and defaults to the browser flow. In a non-interactive shell, such as CI, it logs in with the key and prints a notice.
 
 `origin auth login` also installs the git credential helper, so `git push` and `git pull` against Origin remotes work without further setup.
 
@@ -118,11 +119,11 @@ View the merge-time and push-time rulesets configured for a repository:
 
 Manage the SSH public keys on your Origin account:
 
-| Subcommand       | Description                                                  | Usage                                      |
-| ---------------- | ------------------------------------------------------------ | ------------------------------------------ |
-| `add [key-file]` | Add an SSH public key to your account. `-t` names the key    | `origin ssh-key add ~/.ssh/id_ed25519.pub` |
-| `list`           | List the SSH public keys on your account (`--json` for JSON) | `origin ssh-key list`                      |
-| `delete <id>`    | Delete a key by ID, as printed by `origin ssh-key list`      | `origin ssh-key delete <id>`               |
+| Subcommand       | Description                                                                        | Usage                                                     |
+| ---------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `add [key-file]` | Add an SSH public key to your account. `-t, --title` is required and names the key | `origin ssh-key add ~/.ssh/id_ed25519.pub -t work-laptop` |
+| `list`           | List the SSH public keys on your account (`--json` for JSON)                       | `origin ssh-key list`                                     |
+| `delete <id>`    | Delete a key by ID, as printed by `origin ssh-key list`                            | `origin ssh-key delete <id>`                              |
 
 ## API requests
 
@@ -150,13 +151,13 @@ Branch-valued flags such as `--head` and `--base` then complete local branch nam
 
 ## Environment variables
 
-| Variable                 | Description                                                                               |
-| ------------------------ | ----------------------------------------------------------------------------------------- |
-| `CURSOR_API_KEY`         | API key for `origin auth login`. When set, login skips the browser flow                   |
-| `CURSOR_AUTH_TOKEN`      | Bearer token, the same value as `--auth-token`                                            |
-| `CURSOR_ORIGIN_ENDPOINT` | Default API server endpoint, the same value as `--endpoint`                               |
-| `ORIGIN_REPO`            | Default repository in `org/name` format for `origin api` when there is no `origin` remote |
-| `NO_COLOR`               | Turn off colored output                                                                   |
+| Variable                 | Description                                                                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `CURSOR_API_KEY`         | API key for `origin auth login`. An interactive shell asks before using it instead of the browser; a non-interactive shell uses it |
+| `CURSOR_AUTH_TOKEN`      | Cursor auth token, used directly as a bearer token                                                                                 |
+| `CURSOR_ORIGIN_ENDPOINT` | API server endpoint (default: `https://api.origin.cursor.com`)                                                                     |
+| `ORIGIN_REPO`            | Default repository in `org/name` format for `origin api` when there is no `origin` remote                                          |
+| `NO_COLOR`               | Turn off colored output                                                                                                            |
 
 ## Getting help
 

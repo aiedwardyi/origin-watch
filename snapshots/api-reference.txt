@@ -251,6 +251,8 @@ git -c credential.helper="!f() { echo username=x-access-token; echo password=${I
 
 The Origin CLI credential helper is for user logins. App integrations pass the installation token as shown here. Treat the token like a password, never log it, and mint a fresh one before `expiresAt` when a job still needs Git access.
 
+Git over HTTPS meters its own budget, separate from the REST budget in [Rate limits](https://cursor.com/docs/api/origin/llms-full.txt#rate-limits). A charged Git response carries the same `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Used` headers, with `X-RateLimit-Resource` set to `git` rather than `core`. Over-budget Git requests return `429` with `Retry-After` and `X-RateLimit-Reset`. Read the headers to pace a job rather than assuming a number; unmetered requests carry no rate-limit headers.
+
 On a mirrored repository, an installation token clones, fetches, and pulls, and Origin rejects `git push` with `403` until the mirror becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 ### User-authenticated CLI requests
@@ -345,6 +347,8 @@ Requesting a `:write` scope also grants the matching `:read` scope, so `reposito
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
 
 Mirror-state changes sit outside this table. [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations#transition-repo-mirror), [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/migrations#force-repo-mirror-cutover), and [Detach Repo Mirror](https://cursor.com/docs/api/origin/migrations#detach-repo-mirror) take `repository:mirror:write` or `repository:mirror:delete`, which an app cannot request at installation: they are carried by a Cursor user credential, and the caller must also administer the repository on the mirror's upstream source.
+
+Installation management sits outside it too. [Add App Installation Repositories](https://cursor.com/docs/api/origin/llms-full.txt#add-app-installation-repositories) takes `namespace:installations:write`, which an app cannot request at installation: a namespace admin holds it on a Cursor user credential, and the same credential kind that consented to the installation is the one that can extend it.
 
 App management sits outside it for the same reason. [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app) takes `namespace:apps:create`, [List Namespace Apps](https://cursor.com/docs/api/origin/llms-full.txt#list-namespace-apps) takes `namespace:apps:read`, [Get App](https://cursor.com/docs/api/origin/llms-full.txt#get-app) takes `app:settings:read`, and [Update App](https://cursor.com/docs/api/origin/llms-full.txt#update-app), [Add App Signing Key](https://cursor.com/docs/api/origin/llms-full.txt#add-app-signing-key), and [Revoke App Signing Key](https://cursor.com/docs/api/origin/llms-full.txt#revoke-app-signing-key) take `app:settings:write`. A publisher holds these on a Cursor user credential; an app cannot request them for itself.
 
@@ -1939,6 +1943,139 @@ curl --request POST \
 }
 ```
 
+### Add App Installation Repositories
+
+/v1/origin/namespaces//installations//repos
+
+Requires scope `namespace:installations:write` (user access token).
+
+Adds repositories to an installation's repository selection and returns the updated installation. The write is additive: the listed repositories are unioned with the current selection, a request whose repositories are all already granted succeeds without changing anything, and the installation's scopes never change.
+
+Every listed repository must belong to the target namespace, or the request returns `FailedPrecondition` (HTTP 400) and grants nothing. The same error covers an installation that already carries every repository in the namespace (`repoSelectionMode` is `all`), one that is suspended, and one that predates per-installation scopes. An installation that does not exist, or that belongs to another namespace, returns `404`; the message names the consent page to open when the app has never been installed in the namespace, because this endpoint cannot perform a first install.
+
+The caller must be a Cursor user credential with installation-management access to the namespace. App tokens, installation tokens, and service accounts cannot change an installation's repositories.
+
+#### Path Parameters
+
+`namespaceSlug` string Required
+
+Slug of the namespace the installation belongs to.
+
+`installationId` string Required
+
+Installation identifier.
+
+#### Request Body
+
+`repoIds` array Required
+
+Repository IDs to add to the installation's selection. At least one is required; values are deduplicated, and repositories that are already part of the selection are accepted without change. Every listed repository must belong to the namespace, or the request fails and nothing is granted.
+
+#### Response Fields
+
+`id` string
+
+Installation identifier that the app stores and uses to mint installation access tokens.
+
+`appId` string
+
+Identifier of the installed app.
+
+`target` object
+
+Owner selected by the customer for this installation.
+
+`target.slug` string
+
+URL-facing owner slug used with the owner ID to identify the repository owner.
+
+`target.id` string
+
+Origin owner identifier.
+
+`target.type` string
+
+Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when unknown.
+
+`createdAt` string
+
+RFC 3339 installation creation timestamp.
+
+`updatedAt` string
+
+RFC 3339 timestamp for the latest installation update.
+
+`repoSelectionMode` string
+
+Repository grant mode; exactly all or selected.
+
+`scopes` array
+
+Scopes approved for the installation.
+
+`installedBy` object
+
+The user who originally installed the app, not the most recent re-consent actor. Output-only. Absent when that user record can no longer be read.
+
+`installedBy.id` string
+
+Public identifier for the user, prefixed `user_`.
+
+`installedBy.email` string
+
+Email address of the user.
+
+`installedBy.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`installedBy.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
+`suspendedAt` string
+
+RFC 3339 timestamp set while the installation is suspended. Omitted while the installation is active.
+
+`deletedAt` string
+
+RFC 3339 timestamp for the installation's deletion. Carried only on the `installation.deleted` webhook snapshot; a deleted installation no longer resolves through the API, so this endpoint never returns it.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/namespaces/NAMESPACE_SLUG/installations/INSTALLATION_ID/repos' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "repoIds": [
+    "repo_01k2ja2000e0080000000000q4",
+    "repo_01k2ja2000e0080000000000q5"
+  ]
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "id": "inst_01k2ja2000e0080000000000b2",
+  "appId": "app_01k2ja2000e0080000000000a1",
+  "target": {
+    "slug": "acme",
+    "id": "ns_01k2ja2000e0080000000000p3",
+    "type": "team"
+  },
+  "createdAt": "2026-08-01T09:30:00Z",
+  "updatedAt": "2026-08-02T14:45:00Z",
+  "repoSelectionMode": "selected",
+  "scopes": [
+    "repository:contents:read",
+    "repository:pull_requests:read",
+    "repository:metadata:read"
+  ]
+}
+```
+
 ## Repositories
 
 `cloneUrl` is an output-only HTTPS clone URL. [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) includes `cloneUrl`.
@@ -3059,7 +3196,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `checkRun.actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `checkRun.actor.user` object
 
@@ -3549,7 +3686,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `checkRuns[].actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `checkRuns[].actor.user` object
 
@@ -3843,7 +3980,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `actor.user` object
 
@@ -4405,7 +4542,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `actor.user` object
 
@@ -4829,7 +4966,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `checkRuns[].actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `checkRuns[].actor.user` object
 
@@ -5098,7 +5235,7 @@ Provider identity for one attempt. Reuse it to update that attempt and use a new
 
 `checkRuns[].actor` object
 
-Public actor that produced the run.
+Public actor that produced the run. Always the owning check suite's `actor`.
 
 `checkRuns[].actor.user` object
 
@@ -6462,7 +6599,7 @@ Commit, branch, tag, or symbolic ref (for example `HEAD`) to search. Empty means
 
 `query` string Required
 
-The pattern to search for. By default it is a regular expression supporting character classes, quantifiers, alternation, groups, and anchors; set `literal` to search for the text exactly instead. Whitespace is significant and is searched for as given. An empty pattern returns `InvalidArgument` (HTTP 400). Maximum UTF-8 size: 4096 bytes.
+The pattern to search for. By default it is a regular expression supporting character classes, quantifiers, alternation, groups, and anchors; set `literal` to search for the text exactly instead. Whitespace is significant and is searched for as given. When `literal` is false, case-insensitive matching is a leading `(?i)` in the pattern (for example `(?i)launch`) and whole-word matching is `\b` around it (for example `\blaunch\b`). An empty pattern returns `InvalidArgument` (HTTP 400). Maximum UTF-8 size: 4096 bytes.
 
 `literal` boolean
 
@@ -6470,11 +6607,11 @@ Search for `query` as exact text rather than as a regular expression.
 
 `caseInsensitive` boolean
 
-Match upper and lower case as equivalent.
+Match upper and lower case as equivalent. Applied only when `literal` is true. Ignored for a regular-expression search; write a leading `(?i)` in `query` instead.
 
 `wholeWord` boolean
 
-Match only complete words.
+Match only complete words. Applied only when `literal` is true. Ignored for a regular-expression search; write `\b` around the pattern instead.
 
 `contextBefore` integer
 
@@ -7394,7 +7531,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `grants[].group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `grants[].group.id` string
 
@@ -7476,7 +7613,7 @@ curl --request GET \
 
 Requires scope `repository:settings:write` (installation access token or user access token).
 
-Sets the permission a user, group, or owning-team group holds directly on a repository, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. A user must be an active member of the repository owner's team or organization, and a group an active group of that organization; otherwise the request returns `FailedPrecondition` (HTTP 400).
+Sets the permission a user, group, or owning-team group holds directly on a repository, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. A user must be an active member of the repository owner's team or organization. A group must be one the owner's team owns, or an active group in that team's organization; otherwise the request returns `FailedPrecondition` (HTTP 400).
 
 #### Path Parameters
 
@@ -7512,7 +7649,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -7554,7 +7691,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -7639,7 +7776,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -7727,7 +7864,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `grants[].group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `grants[].group.id` string
 
@@ -7796,7 +7933,7 @@ curl --request GET \
 
 Requires scope `namespace:settings:write` (installation access token or user access token).
 
-Sets the permission a user, group, or owning-team group holds directly on an owner, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. The request returns `FailedPrecondition` (HTTP 400) when the user is not an active member of the owning team or its organization, when the group is not an active group of that organization, or when the write would leave the owner without an admin.
+Sets the permission a user, group, or owning-team group holds directly on an owner, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. The request returns `FailedPrecondition` (HTTP 400) when the user is not an active member of the owning team or its organization, when the group is neither owned by that team nor an active group in its organization, or when the write would leave the owner without an admin.
 
 #### Path Parameters
 
@@ -7828,7 +7965,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -7870,7 +8007,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -7951,7 +8088,7 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `group` object
 
-A Cursor organization group principal.
+A Cursor group principal: a group the owner's team owns, or a group in that team's organization.
 
 `group.id` string
 
@@ -15056,7 +15193,7 @@ Provider-assigned immutable identity for this check attempt (see `CheckRunInput.
 
 `checkRun.actor` object
 
-Principal that produced the check run.
+Principal that produced the check run; always the owning suite's `actor`.
 
 `checkRun.actor.user` object
 
@@ -15142,36 +15279,6 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkRun.rerequestedBy.serviceAccount.id` string
 
-`actor` object
-
-The principal that produced the check run.
-
-`actor.user` object
-
-`actor.user.id` string
-
-`actor.user.email` string Required
-
-`actor.user.displayName` string
-
-Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field. May also be absent on webhook payloads whose actor could not be resolved.
-
-`actor.user.handle` string
-
-The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
-
-`actor.app` object
-
-`actor.app.id` string
-
-`actor.app.displayName` string
-
-The app's registered display name, never empty when present. Omitted on payloads whose app could not be resolved and on the first-party Cursor facade actor.
-
-`actor.serviceAccount` object
-
-`actor.serviceAccount.id` string
-
 **Sample `event.payload`:**
 
 ```json
@@ -15246,12 +15353,6 @@ The app's registered display name, never empty when present. Omitted on payloads
       "title": "Unit tests",
       "summary": "128 tests passed.",
       "text": "All suites green."
-    }
-  },
-  "actor": {
-    "user": {
-      "id": "user_01k2ja2000e0080000000000c3",
-      "email": "jane@acme.dev"
     }
   }
 }
@@ -15467,7 +15568,7 @@ Provider-assigned immutable identity for this check attempt (see `CheckRunInput.
 
 `checkRun.actor` object
 
-Principal that produced the check run.
+Principal that produced the check run; always the owning suite's `actor`.
 
 `checkRun.actor.user` object
 
