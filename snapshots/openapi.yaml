@@ -5215,6 +5215,92 @@ paths:
                     - user
                 scopes:
                     - repository:contents:write
+    /v1/origin/repos/{ownerSlug}/{repoName}/git/refs/{ref}:
+        delete:
+            tags:
+                - OriginService
+            description: |-
+                Deletes a branch reference.
+                 `ref` names the branch as `refs/heads/<branch>` or `heads/<branch>`; only
+                 branch references can be deleted. A branch that does not exist returns
+                 NOT_FOUND. The repository default branch and a branch protected by a
+                 deletion rule are refused with FAILED_PRECONDITION, as is a delete on a
+                 repository whose contents are mirrored from another host. Pull requests
+                 whose head is the deleted branch are closed, as after a pushed deletion.
+                 A branch whose tip moves while the delete is in flight fails with
+                 FAILED_PRECONDITION or ABORTED; retry to delete the new tip.
+            operationId: OriginService_DeleteGitRef
+            parameters:
+                - name: ownerSlug
+                  in: path
+                  description: Owning entity's unique slug.
+                  required: true
+                  schema:
+                    type: string
+                - name: repoName
+                  in: path
+                  description: Repo name, unique to the owner entity.
+                  required: true
+                  schema:
+                    type: string
+                - name: ref
+                  in: path
+                  description: Branch reference to delete, as `refs/heads/<branch>` or `heads/<branch>`.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "204":
+                    description: OK
+                    content: {}
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "409":
+                    description: The request conflicts with the current state of the resource.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation
+                    - user
+                scopes:
+                    - repository:contents:write
     /v1/origin/repos/{ownerSlug}/{repoName}/git/tags/{sha}:
         get:
             tags:
@@ -12539,6 +12625,19 @@ components:
                     description: |-
                         The unique identifier of the installation to delete. Bound from the URL
                          path; the installation must belong to the authenticated app.
+        DeleteGitRefRequest:
+            required:
+                - identifier
+                - ref
+            type: object
+            properties:
+                identifier:
+                    allOf:
+                        - $ref: '#/components/schemas/RepoIdentifier'
+                    description: 'Identity of the repo: `(owner_slug, name)`.'
+                ref:
+                    type: string
+                    description: Branch reference to delete, as `refs/heads/<branch>` or `heads/<branch>`.
         DeleteLabelRequest:
             required:
                 - identifier
@@ -14861,6 +14960,49 @@ components:
                 previousFilename:
                     type: string
             description: A file changed in a pull request.
+        PullRequestLabelWebhookPayload:
+            type: object
+            properties:
+                pullRequest:
+                    allOf:
+                        - $ref: '#/components/schemas/PullRequestReference'
+                    description: The pull request whose assigned labels changed.
+                label:
+                    allOf:
+                        - $ref: '#/components/schemas/Label'
+                    description: The label the event is about.
+                actor:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginActor'
+                    description: |-
+                        The principal that assigned the label, when known. Set only on
+                         `pull_request.label.added`.
+            description: |-
+                A change to the pull request's assigned labels. Read the current set with
+                 `ListPullRequestLabels`.
+            x-origin-webhook-events:
+                - pull_request.label.added
+                - pull_request.label.removed
+            example:
+                pullRequest:
+                    id: pr_01k2ja2000e0080000000000d4
+                    number: "17"
+                    repository:
+                        id: repo_01k2ja2000e0080000000000q4
+                        name: rocket
+                        owner:
+                            slug: acme
+                            id: ns_01k2ja2000e0080000000000p3
+                            type: team
+                label:
+                    id: lbl_01k2ja2000e0080000000000m1
+                    name: bug
+                    color: d73a4a
+                    description: Something isn't working
+                actor:
+                    user:
+                        id: user_01k2ja2000e0080000000000c3
+                        email: jane@acme.dev
         PullRequestMergeability:
             type: object
             properties:
