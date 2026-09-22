@@ -172,6 +172,8 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Headers](https://cursor.com/docs/api/origin#headers)
 - [Signature verification](https://cursor.com/docs/api/origin#signature-verification)
 - [Delivery envelope](https://cursor.com/docs/api/origin#delivery-envelope)
+- [Retries](https://cursor.com/docs/api/origin#retries)
+- [Automatic disable](https://cursor.com/docs/api/origin#automatic-disable)
 - [Recovery](https://cursor.com/docs/api/origin#recovery)
 
 ## Webhooks reference
