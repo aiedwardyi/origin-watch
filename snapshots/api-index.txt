@@ -172,6 +172,13 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Update Ruleset](https://cursor.com/docs/api/origin#update-ruleset)
 - [Delete Ruleset](https://cursor.com/docs/api/origin#delete-ruleset)
 
+## SSH certificate authorities
+
+- [List SSH Certificate Authorities](https://cursor.com/docs/api/origin#list-ssh-certificate-authorities)
+- [Add SSH Certificate Authority](https://cursor.com/docs/api/origin#add-ssh-certificate-authority)
+- [Delete SSH Certificate Authority](https://cursor.com/docs/api/origin#delete-ssh-certificate-authority)
+- [Set SSH Certificate Requirement](https://cursor.com/docs/api/origin#set-ssh-certificate-requirement)
+
 ## Webhooks
 
 - [Headers](https://cursor.com/docs/api/origin#headers)
