@@ -15,6 +15,7 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Overview](https://cursor.com/docs/api/origin)
 - [Base URL](https://cursor.com/docs/api/origin#base-url)
 - [Protocol conventions](https://cursor.com/docs/api/origin#protocol-conventions)
+- [Preview](https://cursor.com/docs/api/origin#preview)
 - [Changelog](https://cursor.com/docs/api/origin/changelog)
 - [Getting started](https://cursor.com/docs/api/origin#getting-started)
 - [Origin access](https://cursor.com/docs/api/origin#origin-access)
@@ -37,6 +38,7 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Common conventions](https://cursor.com/docs/api/origin#common-conventions)
 - [Pagination](https://cursor.com/docs/api/origin#pagination)
 - [Errors](https://cursor.com/docs/api/origin#errors)
+- [IDs](https://cursor.com/docs/api/origin#ids)
 - [Repository paths](https://cursor.com/docs/api/origin#repository-paths)
 - [Resource references](https://cursor.com/docs/api/origin#resource-references)
 - [Check runs](https://cursor.com/docs/api/origin#check-runs)
@@ -69,6 +71,7 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 
 ## Repositories
 
+- [List Namespaces](https://cursor.com/docs/api/origin#list-namespaces)
 - [List Repos](https://cursor.com/docs/api/origin#list-repos)
 - [Get Repo](https://cursor.com/docs/api/origin#get-repo)
 - [Update Repo](https://cursor.com/docs/api/origin#update-repo)
