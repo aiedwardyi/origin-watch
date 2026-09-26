@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
     title: Cursor Origin API
-    description: Public third-party-facing Origin API.
+    description: Public third-party-facing Origin API. Each operation's `x-origin-scopes` extension lists the credential types that can call it in `tokenTypes` (`app`, `installation`, or `user`) and the scopes it requires in `scopes`; `ambient` set to true means every listed scope comes with the credential itself, so an app has nothing to request for it at installation. Each webhook payload schema's `x-origin-webhook-events` extension lists the event types that deliver that payload. `x-cursor-visibility` set to `PREVIEW` marks an operation, parameter, schema, or field that is published in preview and can change before it is generally available.
     version: v1alpha1
 servers:
     - url: https://api.cursor.com
@@ -403,6 +403,140 @@ paths:
                 scopes:
                     - app:metadata:read
                 ambient: true
+    /v1/origin/app/installations/{installationId}/user_access_tokens:
+        post:
+            tags:
+                - OriginService
+            description: |-
+                Creates an installation user token for the authenticated app: a token that
+                 acts as one member of the installation's namespace.
+
+                 Requires app signing-JWT authentication, like CreateInstallationAccessToken.
+                 The installation must belong to the authenticated app and must have been
+                 granted `namespace:user_tokens:write`, or the call fails
+                 PERMISSION_DENIED. Name the user by `user_id` or
+                 `user_email`; a user that is unknown, ambiguous, or not a member of the
+                 namespace fails PERMISSION_DENIED without saying which.
+
+                 Requests made with the token are limited to what both the installation and
+                 the user can access. Optional `scopes` and `repository_ids` narrow that
+                 further; when both are set, every scope must be allowed on every listed
+                 repository for both the installation and the user, or the call fails
+                 PERMISSION_DENIED. Actors recorded for actions taken with the token name
+                 the user, with `performed_via` identifying the app.
+
+                 The token expires after at most 15 minutes and never later than the app
+                 JWT that requested it (`expires_at`); mint a new one rather than caching
+                 past that.
+            operationId: OriginService_CreateInstallationUserToken
+            parameters:
+                - name: installationId
+                  in: path
+                  description: |-
+                    The unique identifier of the installation to scope the token to. Bound from
+                     the URL path; the installation must belong to the authenticated app.
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                userId:
+                                    type: string
+                                    description: |-
+                                        The user's `user_…` id, as returned in actor payloads. Set exactly one
+                                         of `user_id` or `user_email`.
+                                userEmail:
+                                    type: string
+                                    description: |-
+                                        The user's account email, which must match exactly one member. Set
+                                         exactly one of `user_id` or `user_email`.
+                                scopes:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Scope strings that cap the token. Values must be unique and included in
+                                         the installation's accepted scopes. `namespace:user_tokens:write`
+                                         authorizes creating the token and cannot be delegated to it; requesting
+                                         it fails INVALID_ARGUMENT. Empty or omitted leaves the token bounded by
+                                         current access only.
+                                repositoryIds:
+                                    type: array
+                                    items:
+                                        type: string
+                                    description: |-
+                                        Repository IDs that cap the token. Values must be unique, accessible to the
+                                         installation, and contain at most 50 entries. Empty or omitted leaves the
+                                         token bounded by current access only.
+                        examples:
+                            createInstallationUserToken:
+                                value:
+                                    userId: user_01k2ja2000e0080000000000c3
+                                    scopes:
+                                        - repository:pull_requests:reviews:write
+                                    repositoryIds:
+                                        - repo_01k2ja2000e0080000000000q4
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InstallationUserToken'
+                            examples:
+                                createInstallationUserToken:
+                                    value:
+                                        token: YOUR_INSTALLATION_USER_TOKEN
+                                        expiresAt: "2026-08-01T10:30:00Z"
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - app
+                scopes:
+                    - app:metadata:read
+                ambient: true
+                installationScopes:
+                    - namespace:user_tokens:write
     /v1/origin/app/webhook/deliveries:
         get:
             tags:
@@ -613,11 +747,15 @@ paths:
                  configured webhook URL and reports the receiver's response, so a
                  receiver can be verified during setup without waiting for a real event.
 
-                 The ping is signed exactly like production deliveries (Standard Webhooks
-                 headers; verify against `/v1/origin/keys`) with event type `ping` and a
-                 payload identifying the app. It is sent once, synchronously, with no
-                 retries, and does not appear in ListWebhookDeliveries. Requires a
-                 configured webhook URL; rejected with FAILED_PRECONDITION otherwise.
+                 The ping is signed exactly like production deliveries, with event type
+                 `ping` and a payload identifying the app. Its `webhook-signature` header
+                 carries a `v1ed` Ed25519 signature over the lowercase hex SHA-256 digest
+                 of `{webhook-id}.{webhook-timestamp}.{body}`; verify it against
+                 `/v1/origin/keys`. The header names follow Standard Webhooks, but
+                 Standard Webhooks libraries do not verify this signature. It is sent
+                 once, synchronously, with no retries, and does not appear in
+                 ListWebhookDeliveries. Requires a configured webhook URL; rejected with
+                 FAILED_PRECONDITION otherwise.
             operationId: OriginService_PingWebhook
             requestBody:
                 content:
@@ -1377,7 +1515,10 @@ paths:
                                         type: string
                                     description: |-
                                         Outbound webhook event subscriptions (for example `pull_request.created`
-                                         or `repository.pushed`). Unknown event types are rejected.
+                                         or `repository.pushed`). Unknown event types are rejected. Empty
+                                         subscribes to no events: the app then receives only the `installation.*`
+                                         events, which are always delivered and cannot be listed here. An event
+                                         the app does not subscribe to produces no delivery.
                                 description:
                                     type: string
                                     description: Short app description.
@@ -2631,12 +2772,10 @@ paths:
                                     enum:
                                         - internal
                                         - private
-                                        - public
                                     type: string
                                     description: |-
-                                        New repository visibility, `internal`, `private`, or `public`.
-                                         Unspecified leaves the visibility unchanged. Writes of `public` are
-                                         rejected until set-public rules land.
+                                        New repository visibility, `internal` or `private`.
+                                         Unspecified leaves the visibility unchanged.
                         examples:
                             updateRepo:
                                 value:
@@ -3947,10 +4086,38 @@ paths:
                   in: query
                   description: |-
                     Opaque cursor from a previous response's `next_page_token`. Empty for the
-                     first page. Encodes the starting ref and page, so `sha`/`page_size` on a
-                     follow-up request are ignored when a token is supplied.
+                     first page. Encodes the starting ref, walk position, and email filters, so
+                     `sha`/`page_size`/`author_emails`/`committer_emails` on a follow-up
+                     request are ignored when a token is supplied. A filtered page can hold
+                     fewer than `page_size` commits, or none, while `next_page_token` is set.
+                     Keep paging until it is empty.
                   schema:
                     type: string
+                - name: authorEmails
+                  in: query
+                  description: |-
+                    Optional git author-email filter. Only commits whose git author email
+                     equals any listed email are returned. Comparison is case-insensitive after
+                     trimming whitespace, and blank entries and duplicates are ignored. At most
+                     100 distinct emails. Empty means no filter. These are git author emails,
+                     not Origin actor ids. Each page scans at most 1000 commits for matches.
+                  schema:
+                    type: array
+                    items:
+                        type: string
+                - name: committerEmails
+                  in: query
+                  description: |-
+                    Optional git committer-email filter. Only commits whose git committer
+                     email equals any listed email are returned. Comparison is case-insensitive
+                     after trimming whitespace, and blank entries and duplicates are ignored.
+                     At most 100 distinct emails. Empty means no filter. Combined with
+                     `author_emails`, a commit must match both lists. Each page scans at most
+                     1000 commits for matches.
+                  schema:
+                    type: array
+                    items:
+                        type: string
             responses:
                 "200":
                     description: OK
@@ -7690,7 +7857,6 @@ paths:
                                                 number: "3"
                                                 headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                                 baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                                createdAt: "2026-08-01T09:30:00Z"
                                             path: src/telemetry/retry.ts
                                             side: right
                                             startLine: 42
@@ -7877,7 +8043,6 @@ paths:
                                                 number: "3"
                                                 headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                                 baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                                createdAt: "2026-08-01T09:30:00Z"
                                             path: src/telemetry/retry.ts
                                             side: right
                                             startLine: 42
@@ -7991,7 +8156,6 @@ paths:
                                             number: "3"
                                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                            createdAt: "2026-08-01T09:30:00Z"
                                         path: src/telemetry/retry.ts
                                         side: right
                                         startLine: 42
@@ -8119,6 +8283,10 @@ paths:
                                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
                                             createdAt: "2026-08-01T09:30:00Z"
+                                            potentialMergeCommit:
+                                                state: prepared
+                                                sha: c7b6a5948372615049f8e7d6c5b4a3928170605f
+                                                baseSha: 5e2d1c0b9a8f7e6d5c4b3a2918070605f4e3d2c1
                 "400":
                     description: Bad Request
                     content:
@@ -8424,7 +8592,6 @@ paths:
                                                     number: "3"
                                                     headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                                     baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                                    createdAt: "2026-08-01T09:30:00Z"
                                                 path: src/telemetry/retry.ts
                                                 side: right
                                                 startLine: 42
@@ -8591,7 +8758,6 @@ paths:
                                                 number: "3"
                                                 headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                                 baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                                createdAt: "2026-08-01T09:30:00Z"
                                             path: src/telemetry/retry.ts
                                             side: right
                                             startLine: 42
@@ -10007,7 +10173,6 @@ paths:
                                                 number: "3"
                                                 headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                                 baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                                createdAt: "2026-08-01T09:30:00Z"
                                         pullRequest:
                                             id: pr_01k2ja2000e0080000000000d4
                                             number: "17"
@@ -10181,7 +10346,6 @@ paths:
                                             number: "3"
                                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                            createdAt: "2026-08-01T09:30:00Z"
                 "400":
                     description: Bad Request
                     content:
@@ -10299,7 +10463,6 @@ paths:
                                             number: "3"
                                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                            createdAt: "2026-08-01T09:30:00Z"
                 "400":
                     description: Bad Request
                     content:
@@ -10424,7 +10587,6 @@ paths:
                                             number: "3"
                                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                                            createdAt: "2026-08-01T09:30:00Z"
                                         dismissal:
                                             dismissedBy:
                                                 user:
@@ -11659,7 +11821,9 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Outbound webhook event subscriptions.
+                    description: |-
+                        Outbound webhook event subscriptions. The `installation.*` events are
+                         always delivered and never appear here.
                 createdAt:
                     readOnly: true
                     type: string
@@ -12716,7 +12880,7 @@ components:
                 version:
                     readOnly: true
                     allOf:
-                        - $ref: '#/components/schemas/PullRequestVersion'
+                        - $ref: '#/components/schemas/PullRequestVersionReference'
                     description: |-
                         The pull request version the thread was filed against, including its
                          head and base SHAs (see `PullRequestReview.pull_request_version`).
@@ -13030,7 +13194,10 @@ components:
                         type: string
                     description: |-
                         Outbound webhook event subscriptions (for example `pull_request.created`
-                         or `repository.pushed`). Unknown event types are rejected.
+                         or `repository.pushed`). Unknown event types are rejected. Empty
+                         subscribes to no events: the app then receives only the `installation.*`
+                         events, which are always delivered and cannot be listed here. An event
+                         the app does not subscribe to produces no delivery.
                 description:
                     type: string
                     description: Short app description.
@@ -13181,6 +13348,44 @@ components:
                         Repository IDs to grant the token. Values must be unique, accessible to the
                          installation, and contain at most 50 entries. Empty or omitted inherits all
                          accessible repositories.
+        CreateInstallationUserTokenRequest:
+            required:
+                - installationId
+            type: object
+            properties:
+                installationId:
+                    type: string
+                    description: |-
+                        The unique identifier of the installation to scope the token to. Bound from
+                         the URL path; the installation must belong to the authenticated app.
+                userId:
+                    type: string
+                    description: |-
+                        The user's `user_…` id, as returned in actor payloads. Set exactly one
+                         of `user_id` or `user_email`.
+                userEmail:
+                    type: string
+                    description: |-
+                        The user's account email, which must match exactly one member. Set
+                         exactly one of `user_id` or `user_email`.
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Scope strings that cap the token. Values must be unique and included in
+                         the installation's accepted scopes. `namespace:user_tokens:write`
+                         authorizes creating the token and cannot be delegated to it; requesting
+                         it fails INVALID_ARGUMENT. Empty or omitted leaves the token bounded by
+                         current access only.
+                repositoryIds:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Repository IDs that cap the token. Values must be unique, accessible to the
+                         installation, and contain at most 50 entries. Empty or omitted leaves the
+                         token bounded by current access only.
         CreateLabelRequest:
             required:
                 - identifier
@@ -14353,6 +14558,26 @@ components:
                 app:
                     id: app_01k2ja2000e0080000000000a1
                     displayName: CI Status Bot
+        InstallationUserToken:
+            type: object
+            properties:
+                token:
+                    readOnly: true
+                    type: string
+                    description: |-
+                        The installation user token. This is a secret credential; treat it like a
+                         password and do not log it.
+                expiresAt:
+                    readOnly: true
+                    type: string
+                    description: |-
+                        When the token expires: at most 15 minutes after creation, and no later
+                         than the app JWT that created it. Read this field rather than assuming a
+                         lifetime. Serialized as an RFC 3339 / ISO-8601 string in JSON.
+                    format: date-time
+            description: |-
+                A short-lived installation user token: an installation acting as one of
+                 its namespace's users.
         Label:
             type: object
             properties:
@@ -14664,8 +14889,32 @@ components:
                     type: string
                     description: |-
                         Opaque cursor from a previous response's `next_page_token`. Empty for the
-                         first page. Encodes the starting ref and page, so `sha`/`page_size` on a
-                         follow-up request are ignored when a token is supplied.
+                         first page. Encodes the starting ref, walk position, and email filters, so
+                         `sha`/`page_size`/`author_emails`/`committer_emails` on a follow-up
+                         request are ignored when a token is supplied. A filtered page can hold
+                         fewer than `page_size` commits, or none, while `next_page_token` is set.
+                         Keep paging until it is empty.
+                authorEmails:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Optional git author-email filter. Only commits whose git author email
+                         equals any listed email are returned. Comparison is case-insensitive after
+                         trimming whitespace, and blank entries and duplicates are ignored. At most
+                         100 distinct emails. Empty means no filter. These are git author emails,
+                         not Origin actor ids. Each page scans at most 1000 commits for matches.
+                committerEmails:
+                    type: array
+                    items:
+                        type: string
+                    description: |-
+                        Optional git committer-email filter. Only commits whose git committer
+                         email equals any listed email are returned. Comparison is case-insensitive
+                         after trimming whitespace, and blank entries and duplicates are ignored.
+                         At most 100 distinct emails. Empty means no filter. Combined with
+                         `author_emails`, a commit must match both lists. Each page scans at most
+                         1000 commits for matches.
         ListCommitsResponse:
             type: object
             properties:
@@ -15564,6 +15813,23 @@ components:
                          /@handle), without the @ prefix. Present only while the user's profile
                          is publicly visible; omitted for users without a claimed handle and for
                          non-public profiles.
+                performedVia:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginUserActor_PerformedViaActor'
+                    description: |-
+                        Set when an app acted on this user's behalf with an installation user
+                         token, for the action this actor field describes. For example, on a
+                         comment's author it names the app that created the comment, not an actor
+                         that later edited or deleted it. Absent when the user acted directly, and
+                         may be absent when delegation data is unavailable.
+        OriginUserActor_PerformedViaActor:
+            type: object
+            properties:
+                app:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginAppActor'
+                    description: The app that acted on the user's behalf.
+            description: Identifies an actor that acted on behalf of the user.
         Owner:
             type: object
             properties:
@@ -15606,7 +15872,7 @@ components:
                 deliveryId:
                     readOnly: true
                     type: string
-                    description: Standard Webhooks `webhook-id` of the test delivery.
+                    description: The `webhook-id` header value of the test delivery.
                 eventId:
                     readOnly: true
                     type: string
@@ -15677,6 +15943,40 @@ components:
             description: |-
                 The pair `check_run` + `outcome` is the same per-run result a
                  `BatchUpsertCheckRuns` `results` element carries, inlined.
+        PotentialMergeCommit:
+            type: object
+            properties:
+                state:
+                    enum:
+                        - unknown
+                        - prepared
+                        - merge_conflict
+                    type: string
+                    description: |-
+                        How far the preparation of this version got; a new version starts as
+                         `unknown` until its own preparation lands. Unrecognized values must be
+                         treated as `unknown`.
+                sha:
+                    type: string
+                    description: |-
+                        Set only when `state` is `prepared`: the two-parent test-merge commit,
+                         second parent the version's `head_sha`, first parent `base_sha`; the tip
+                         of `pull/<number>/merge` while this version is the latest; readable by
+                         SHA afterwards.
+                baseSha:
+                    type: string
+                    description: |-
+                        Set only when `state` is `prepared`: the base branch tip at preparation
+                         time; can be newer than the version's `base_sha`, not refreshed when the
+                         base merely advances; re-prepared on reopen.
+            description: |-
+                Origin's test merge of a pull request version and how far its preparation
+                 got: `state` says which; `sha` and `base_sha` describe the two-parent
+                 test-merge commit and are set exactly when `state` is `prepared`. For
+                 stacked pull requests the base branch is the parent's branch, so this
+                 covers only this pull request's changes on top of it. A fact about the
+                 version it is on (`PullRequestVersion.potential_merge_commit`), so it stays
+                 readable after the pull request is merged.
         PullRequest:
             type: object
             properties:
@@ -15905,7 +16205,6 @@ components:
                             number: "3"
                             headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                             baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                            createdAt: "2026-08-01T09:30:00Z"
                         path: src/telemetry/retry.ts
                         side: right
                         startLine: 42
@@ -16172,7 +16471,7 @@ components:
                     format: date-time
                 pullRequestVersion:
                     allOf:
-                        - $ref: '#/components/schemas/PullRequestVersion'
+                        - $ref: '#/components/schemas/PullRequestVersionReference'
                     description: The pull request version and head SHA the verdict applies to.
                 dismissal:
                     allOf:
@@ -16242,7 +16541,6 @@ components:
                         number: "3"
                         headSha: 9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4
                         baseSha: 3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8
-                        createdAt: "2026-08-01T09:30:00Z"
         PullRequestReviewerWebhookPayload:
             type: object
             properties:
@@ -16329,11 +16627,40 @@ components:
                     type: string
                     description: When this version was created.
                     format: date-time
+                potentialMergeCommit:
+                    allOf:
+                        - $ref: '#/components/schemas/PotentialMergeCommit'
+                    description: |-
+                        Origin's test merge of this version and how far its preparation got
+                         (`state`). Computed for this version: the commit's second parent is
+                         `head_sha`; its first parent is the test merge's `base_sha`, the base
+                         branch tip at preparation, which can be newer than this version's
+                         `base_sha`. The `pull/<number>/merge` ref points only at the latest
+                         version's commit; older commits stay readable by SHA through the API
+                         (`GetCommit`), though not fetchable by SHA over git. Distinct from
+                         `PullRequest.merge_commit_sha`, which is set only once merged. Set on
+                         `PullRequest.version` and `PullRequestWebhook.version`.
             description: |-
                 A numbered revision of a change. A new version is recorded when the pull
                  request's head is pushed or when it is retargeted to another base, each
                  with its own head/base SHAs and diff stats. The base branch advancing on
                  its own records nothing.
+        PullRequestVersionReference:
+            type: object
+            properties:
+                number:
+                    type: string
+                    description: Monotonic version number within the pull request (1-based).
+                headSha:
+                    type: string
+                    description: Head commit SHA of this version.
+                baseSha:
+                    type: string
+                    description: Base commit SHA this version is diffed against.
+            description: |-
+                Identity and commit coordinates of a pull request version. The full
+                 `PullRequestVersion` (with `created_at` and `potential_merge_commit`) is on
+                 `PullRequest.version` and `PullRequestWebhook.version`.
         PullRequestWebhook:
             type: object
             properties:
@@ -16634,9 +16961,8 @@ components:
                     enum:
                         - internal
                         - private
-                        - public
                     type: string
-                    description: Repository visibility, `internal`, `private`, or `public`.
+                    description: Repository visibility, `internal` or `private`.
                 allowMergeCommit:
                     readOnly: true
                     type: boolean
@@ -17592,12 +17918,10 @@ components:
                     enum:
                         - internal
                         - private
-                        - public
                     type: string
                     description: |-
-                        New repository visibility, `internal`, `private`, or `public`.
-                         Unspecified leaves the visibility unchanged. Writes of `public` are
-                         rejected until set-public rules land.
+                        New repository visibility, `internal` or `private`.
+                         Unspecified leaves the visibility unchanged.
         UpdateRulesetRequest:
             required:
                 - identifier
