@@ -214,3 +214,4 @@ The base URL for API requests is `https://api.cursor.com/v1/origin`. The Origin 
 - [Installation Suspended](https://cursor.com/docs/api/origin#installation-suspended)
 - [Installation Unsuspended](https://cursor.com/docs/api/origin#installation-unsuspended)
 - [Installation Deleted](https://cursor.com/docs/api/origin#installation-deleted)
+- [Check Run Annotations](https://cursor.com/docs/api/origin#check-run-annotations)
