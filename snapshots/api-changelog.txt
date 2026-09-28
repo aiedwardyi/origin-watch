@@ -2,6 +2,8 @@ API
 Origin API Changelog
 The Origin API is in Early Beta and subject to change. Review the OpenAPI specification when updating an integration.
 Changes to the Origin public API, including endpoints, request and response schemas, scopes, and webhooks, grouped by day with the newest first. Each change carries one label: Breaking, Deprecated, Added, Changed, or Removed. Breaking and deprecated changes include migration guidance inline. The Origin API reference always reflects the latest synced state.
+September 27, 2026
+Changed. A pageSize sent with a pageToken applies to that page, and a follow-up request that omits pageSize keeps the previous page size, on List App Installation Repositories, List Branches, List Check Run Annotations, List Check Runs For Commit, List Check Runs For Suite, List Check Suites For Commit, List Commit Files, List Comparison Files, List Namespace Grants, List Namespaces, List Pull Request Files, List Pull Requests, List Repos, and List Repository Grants. List Commit Files and List Comparison Files no longer reject a follow-up pageSize that differs from the first request's with InvalidArgument (HTTP 400), and the other endpoints no longer ignore it. Everything else a page token is bound to, such as the repository, filters, and pull request version, still has to match.
 September 26, 2026
 Changed. Merge Pull Request returns Aborted (HTTP 409 Conflict) instead of InvalidArgument (HTTP 400) when the pull request's head branch has moved past the head of its latest version, for example because a push landed that Origin had not yet recorded as a new version. That is the same answer as a stale expectedHeadSha. Nothing merges in either case; retry after Get Pull Request reports the new head in version.headSha.
 September 25, 2026
