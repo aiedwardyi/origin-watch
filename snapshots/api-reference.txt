@@ -100,7 +100,7 @@ Installations use one of two repository-selection modes:
 - `all`: the installation can access every repository owned by the selected target.
 - `selected`: the installation can access only repositories selected by the workspace admin.
 
-Both modes cover mirrored repositories as well as native Origin ones, so a mirror appears in `GET /installation/repos` and can be selected. A mirror is read-only until it becomes a stable outbound mirror: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
+Both modes cover mirrored repositories as well as native Origin ones, so a mirror appears in `GET /installation/repos` and can be selected. A mirror is read-only for the installation: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 Use `GET /installation/repos` with an installation token to discover the repositories available to that installation. App JWT endpoints can list, inspect, and delete the app's installations. Deleting an installation prevents new tokens from being minted.
 
@@ -261,7 +261,7 @@ The Origin CLI credential helper is for user logins. App integrations pass the i
 
 Git over HTTPS meters its own budget, separate from the REST budget in [Rate limits](https://cursor.com/docs/api/origin/llms-full.txt#rate-limits). A charged Git response carries the same `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Used` headers, with `X-RateLimit-Resource` set to `git` rather than `core`. Over-budget Git requests return `429` with `Retry-After` and `X-RateLimit-Reset`. Read the headers to pace a job rather than assuming a number; unmetered requests carry no rate-limit headers.
 
-On a mirrored repository, an installation token clones, fetches, and pulls, and Origin rejects `git push` with `403` until the mirror becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
+On a mirrored repository, an installation token clones, fetches, and pulls, and Origin rejects `git push` with `403`. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 ### User-authenticated CLI requests
 
@@ -332,7 +332,7 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 
 | Scope                                    | Allows                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `repository:metadata:read`               | Read repository metadata. Added automatically.                                                                                                                                                                                                                                                                                       |
+| `repository:metadata:read`               | Read repository metadata and a collaborator's permission on a repository. Added automatically.                                                                                                                                                                                                                                       |
 | `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Search file text. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source.                                                                                                          |
 | `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints. Re-request a check run.                                                                                                                                                                                            |
 | `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, assigned labels, and merge eligibility.                                                                                                                                                                                                                                     |
@@ -355,7 +355,7 @@ Requesting a `:write` scope also grants the matching `:read` scope, so `reposito
 
 The installation token can only narrow these grants. It cannot add a scope or repository the workspace admin did not approve.
 
-Mirror-state changes sit outside this table. [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror), [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/migrations.md#force-repo-mirror-cutover), and [Detach Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#detach-repo-mirror) take `repository:mirror:write` or `repository:mirror:delete`, which an app cannot request at installation: they are carried by a Cursor user credential, and the caller must also administer the repository on the mirror's upstream source.
+Mirror-state changes sit outside this table. [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror) and [Detach Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#detach-repo-mirror) take `repository:mirror:write` or `repository:mirror:delete`, which an app cannot request at installation: they are carried by a Cursor user credential, and the caller must also administer the repository on the mirror's upstream source.
 
 Installation management sits outside it too. [Add App Installation Repositories](https://cursor.com/docs/api/origin/llms-full.txt#add-app-installation-repositories) takes `namespace:installations:write`, which an app cannot request at installation: a namespace admin holds it on a Cursor user credential, and the same credential kind that consented to the installation is the one that can extend it.
 
@@ -365,16 +365,16 @@ The table covers the scopes an app requests at installation. To look up the scop
 
 ### Mirrored repositories
 
-An installation uses every scope it holds on a native Origin repository and on a stable outbound mirror. On a repository in any other mirror state, only two scopes apply:
+An installation uses every scope it holds on a native Origin repository. On a mirrored repository, only two scopes apply:
 
 - `repository:metadata:read`
 - `repository:contents:read`
 
 Every other scope returns `403` on that repository, whatever the workspace admin approved. Over the REST API, repository and contents reads, commit comparison, and [Sync Mirror](https://cursor.com/docs/api/origin/llms-full.txt#sync-mirror) keep working, and Origin rejects pull requests, reviews, comments, checks, rulesets, and every write. Over Git HTTPS, clone, fetch, pull, and LFS download keep working, and Origin rejects push and LFS upload.
 
-Moving a repository out of that state is a user-credential operation rather than something an installation can do: [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror) advances the mirror direction, [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/migrations.md#force-repo-mirror-cutover) cuts over to the upstream source without pushing divergent refs back, and [Detach Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#detach-repo-mirror) disconnects the mirror for good.
+Changing a repository's mirror state is a user-credential operation rather than something an installation can do: [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror) retries a mirror whose initial sync failed, and [Detach Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#detach-repo-mirror) disconnects the mirror for good, leaving a native repository.
 
-The `mirror` object on a repository does not tell you whether writes are allowed. A mirror partway through a transition can report `mirror.status` as `outbound` and still be read-only, so treat the `403` as authoritative rather than branching on `mirror.status`.
+Treat the `403` as authoritative rather than deciding from `mirror.status` whether writes are allowed.
 
 ## Rate limits
 
@@ -388,12 +388,12 @@ The Origin API uses a shared per-principal point budget that resets on a rolling
 
 Every endpoint charges a fixed cost against that budget before the handler runs. Authentication and authorization failures are not charged.
 
-| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball), and [Grep Contents](https://cursor.com/docs/api/origin/llms-full.txt#grep-contents)                                                                                           |
-| 10   | [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app), [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request), [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability), [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror), and [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/migrations.md#force-repo-mirror-cutover) |
+| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball), and [Grep Contents](https://cursor.com/docs/api/origin/llms-full.txt#grep-contents) |
+| 10   | [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app), [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request), [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability), and [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror)                |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -498,12 +498,14 @@ Apps report CI results as check suites and check runs against a commit through [
 
 ### Attempts and the current attempt
 
-Each `(actor, key, externalId)` reported against a commit is one suite attempt, and each `(suite, key, externalId)` within it is one run attempt. Reusing an `externalId` updates that attempt in place; a new `externalId` starts a new attempt and keeps the earlier one as history. Superseded attempts stay readable by id through [Get Check Suite](https://cursor.com/docs/api/origin/llms-full.txt#get-check-suite) and [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run).
+Each `(actor, key, externalId, baseSha)` reported against a commit is one suite attempt, and each `(suite, key, externalId)` within it is one run attempt. A post without `baseSha` addresses the base-agnostic attempt, so the same `externalId` posted against a second base, or with and without a base, starts a separate attempt. Reusing an `externalId` with the same base updates that attempt in place; a new `externalId` starts a new attempt and keeps the earlier one as history. Superseded attempts stay readable by id through [Get Check Suite](https://cursor.com/docs/api/origin/llms-full.txt#get-check-suite) and [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run).
 
 Where the API shows a commit's current checks, in [List Check Suites For Commit](https://cursor.com/docs/api/origin/llms-full.txt#list-check-suites-for-commit), [List Check Runs For Commit](https://cursor.com/docs/api/origin/llms-full.txt#list-check-runs-for-commit), and the pull request's CI state and required checks, Origin collapses attempts in two steps:
 
 1. The current suite attempt per `(actor, key)` is the one whose current runs, as the second step picks them, carry the newest `externalUpdatedAt`; a suite with no runs ranks by its `createdAt`. Ties break by the suite's `createdAt`, then its `id`, newest first.
 2. Within that suite attempt, the current run for a `key` is the one with the newest `externalUpdatedAt`. Ties break by `createdAt`, then `id`, newest first.
+
+In the commit listings, attempts reported against different `baseSha` values compete in the same collapse for their `(actor, key)`.
 
 [List Check Runs For Suite](https://cursor.com/docs/api/origin/llms-full.txt#list-check-runs-for-suite) applies the second step to the suite you name. A run is current for its commit only when its suite is the commit's current suite attempt. Because the first step ranks whole suite attempts, a run posted under a superseded suite attempt stays out of the commit's checks while another attempt holds a newer `externalUpdatedAt`; once its timestamp is the newest, its suite attempt becomes current and the other attempt's runs are hidden instead.
 
@@ -541,7 +543,7 @@ Only a running run, `in_progress` or `failing`, expires. Once its `deadlineAt` h
 - Threads are addressable only for resolution. There is no endpoint that lists threads directly; read them from the comments they contain.
 - Push webhooks do not include a complete commit list.
 - Pull request merge supports native Origin repositories. Mirrored repositories are rejected.
-- A mirrored repository is read-only for an installation until it becomes a stable outbound mirror. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
+- A mirrored repository is read-only for an installation. See [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 ## Implementation checklist
 
@@ -1151,7 +1153,7 @@ Requires an installation access token (`oit_`) minted by CreateInstallationAcces
 
 Partners discover their repositories through this endpoint. List entries are sparse repository summaries; use [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) for full timestamps. [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) includes the output-only `cloneUrl`.
 
-Results include mirrored repositories. A mirror is read-only until it becomes a stable outbound mirror: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
+Results include mirrored repositories, which are read-only for an installation: see [Mirrored repositories](https://cursor.com/docs/api/origin/llms-full.txt#mirrored-repositories).
 
 #### Query Parameters
 
@@ -1219,7 +1221,7 @@ Opaque repository identifier assigned by the source.
 
 `repositories[].mirror.status` string
 
-Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
 
 `repositories[].visibility` string
 
@@ -2438,7 +2440,7 @@ Opaque repository identifier assigned by the source.
 
 `repositories[].mirror.status` string
 
-Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
 
 `repositories[].visibility` string
 
@@ -2576,7 +2578,7 @@ Opaque repository identifier assigned by the source.
 
 `mirror.status` string
 
-Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
 
 `visibility` string
 
@@ -2730,7 +2732,7 @@ Opaque repository identifier assigned by the source.
 
 `mirror.status` string
 
-Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
 
 `visibility` string
 
@@ -2882,7 +2884,7 @@ Opaque repository identifier assigned by the source.
 
 `mirror.status` string
 
-Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`, `outbound`.
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
 
 `visibility` string
 
@@ -3001,6 +3003,75 @@ curl --request GET \
       }
     }
   ]
+}
+```
+
+### Get Repository Collaborator Permission
+
+GET
+
+`/v1/origin/repos/{ownerSlug}/{repoName}/collaborators/{userId}/permission`
+
+Requires scope `repository:metadata:read` (installation access token or user access token).
+
+Returns a user's permission on a repository, combined from their direct and inherited grants. The result describes the user's grants and does not depend on the credential you call with. Only repositories whose source of truth is Origin are supported. A user whose grants give no access, an ID that names no active account, a mirrored repository, and a repository that does not exist or is not visible to you all return the same `404`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+`userId` string Required
+
+Public ID of the user (`user_…`). A malformed ID returns `InvalidArgument` (HTTP 400).
+
+#### Response Fields
+
+`user` object
+
+The collaborator. Always set.
+
+`user.id` string
+
+Public identifier for the user.
+
+`user.email` string
+
+Email address of the user. Always set.
+
+`user.displayName` string
+
+Display name of the user: the account's first and last name joined with a space, the same name the product renders. Omitted when the account has no name.
+
+`user.handle` string
+
+The user's claimed profile handle, without the `@` prefix. Present only while that profile is publicly visible; omitted otherwise.
+
+`permission` string
+
+The user's permission on the repository, combined from every grant that reaches it: grants on the repository and on its owner, whether held directly, through a group, or through the owning team's built-in groups. Owner-level `PERMISSION_READ`, `PERMISSION_CONTRIBUTOR`, and `PERMISSION_WRITE` grants count only on internal repositories, and `PERMISSION_CONTRIBUTOR` counts as `read`. The highest level wins, so the value can differ from the `permission` of any single grant that [List Repository Grants](https://cursor.com/docs/api/origin/llms-full.txt#list-repository-grants) returns. It is `custom` when a custom policy gives repository access that none of the user's preset grants does. Allowed values: `read`, `write`, `admin`, `custom`.
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/collaborators/USER_ID/permission' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "user": {
+    "id": "user_01k2ja2000e0080000000000c3",
+    "email": "jane@acme.dev",
+    "displayName": "Jane Doe"
+  },
+  "permission": "write"
 }
 ```
 
@@ -3129,10 +3200,6 @@ See [Get Mirror Transition Job](https://cursor.com/docs/api/origin/migrations.md
 ### Get Active Mirror Transition Job
 
 See [Get Active Mirror Transition Job](https://cursor.com/docs/api/origin/migrations.md#get-active-mirror-transition-job).
-
-### Force Repo Mirror Cutover
-
-See [Force Repo Mirror Cutover](https://cursor.com/docs/api/origin/migrations.md#force-repo-mirror-cutover).
 
 ### Transition Repo Mirror
 
@@ -3270,6 +3337,10 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
+`baseSha` string
+
+Comparison base the check run was evaluated against (40- or 64-character hex): a pull request version's `baseSha`. It is part of the check suite and check run identity, so posting the same `externalId` and `key` against another base creates a separate attempt instead of overwriting the first. Omit it for a base-agnostic run; a later post must repeat the same value to address the same attempt. An empty string returns `InvalidArgument` (HTTP 400).
+
 #### Response Fields
 
 `checkSuite` object
@@ -3379,6 +3450,10 @@ Service account variant of the actor. Set when a service account performed the a
 `checkSuite.actor.serviceAccount.id` string
 
 Public identifier for the service account.
+
+`checkSuite.baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `checkRun` object
 
@@ -3547,6 +3622,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRun.rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
+
+`checkRun.baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `outcome` string
 
@@ -3769,6 +3848,10 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
+`baseSha` string
+
+Comparison base every check run in this request was evaluated against (40- or 64-character hex); see `baseSha` on [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run). Omit it for base-agnostic runs. An empty string returns `InvalidArgument` (HTTP 400).
+
 #### Response Fields
 
 `checkSuite` object
@@ -3878,6 +3961,10 @@ Service account variant of the actor. Set when a service account performed the a
 `checkSuite.actor.serviceAccount.id` string
 
 Public identifier for the service account.
+
+`checkSuite.baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `checkRuns` array
 
@@ -4046,6 +4133,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRuns[].rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
+
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `results` array
 
@@ -4397,6 +4488,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
+
+`baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 ```bash
 curl --request GET \
@@ -4966,6 +5061,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
+`baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 ```bash
 curl --request POST \
   --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME/check-runs/CHECK_RUN_ID/rerequest' \
@@ -5153,6 +5252,10 @@ Service account variant of the actor. Set when a service account performed the a
 `actor.serviceAccount.id` string
 
 Public identifier for the service account.
+
+`baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 ```bash
 curl --request GET \
@@ -5393,6 +5496,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRuns[].rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
+
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `nextPageToken` string
 
@@ -5665,6 +5772,10 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
 
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 `nextPageToken` string
 
 Opaque cursor for the next page; empty when there are no more pages.
@@ -5865,6 +5976,10 @@ Service account variant of the actor. Set when a service account performed the a
 `checkSuites[].actor.serviceAccount.id` string
 
 Public identifier for the service account.
+
+`checkSuites[].baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `nextPageToken` string
 
@@ -7334,7 +7449,7 @@ Commit message.
 
 `author` object Required
 
-Commit author. Timestamps are assigned by the server.
+Commit author. Timestamps are assigned by the server. Origin drops `<`, `>`, and newline characters from `name` and `email`, as `git commit` does, and a value with nothing left returns `InvalidArgument` (HTTP 400).
 
 `author.name` string Required
 
@@ -7346,7 +7461,7 @@ Email recorded in the Git identity.
 
 `committer` object
 
-Commit committer. Defaults to `author` when omitted.
+Commit committer. Defaults to `author` when omitted. Its `name` and `email` are cleaned the same way as `author`'s.
 
 `committer.name` string
 
@@ -8594,9 +8709,9 @@ curl --request DELETE \
 
 ## Inbound IP allowlist
 
-A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. These endpoints read the list, turn enforcement on or off, and add, update, and remove entries. Allowlists are available on team namespaces that have the feature enabled.
+A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. These endpoints read the list, turn enforcement on or off, and add, update, and remove entries. Allowlists are available on team namespaces.
 
-Each entry is an IPv4 or IPv6 address or CIDR range with its own opaque `id`. The entry endpoints address an entry by that ID as `entryId`, and the ID stays the same when [Update Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/llms-full.txt#update-inbound-ip-allowlist-entry) changes the entry's `cidr`. A namespace lists at most 100 entries, and a disabled entry stays listed but admits nothing.
+Each entry is an IPv4 or IPv6 address or CIDR range with its own opaque `id`. The entry endpoints address an entry by that ID as `entryId`, and the ID stays the same when [Update Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/llms-full.txt#update-inbound-ip-allowlist-entry) changes the entry's `cidr`. A namespace lists at most 1,000 entries, and a disabled entry stays listed but admits nothing.
 
 Reading the list and its entries accepts installation and user tokens holding `namespace:settings:read`. Turning enforcement on or off and adding, updating, and removing entries take a Cursor user credential holding `namespace:settings:write`; app and installation tokens are not accepted. Enabling enforcement, an update, or a removal that would exclude the caller's own address returns `InvalidArgument` (HTTP 400), and a write from a caller an enforced list already excludes returns `PermissionDenied` (HTTP 403).
 
@@ -8608,7 +8723,7 @@ GET
 
 Requires scope `namespace:settings:read` (installation access token or user access token).
 
-Returns the namespace's inbound IP allowlist: whether it is enforced and every entry, oldest first. The response is not paginated; a namespace lists at most 100 entries. Allowlists are available on team namespaces that have the feature enabled; any other namespace returns `FailedPrecondition` (HTTP 400).
+Returns the namespace's inbound IP allowlist: whether it is enforced and every entry, oldest first. The response is not paginated; a namespace lists at most 1,000 entries. Allowlists are available on team namespaces; any other namespace returns `FailedPrecondition` (HTTP 400).
 
 #### Path Parameters
 
@@ -8767,7 +8882,7 @@ Requires scope `namespace:settings:write` (user access token).
 
 Adds an entry to the namespace's inbound IP allowlist and returns it.
 
-The CIDR is stored as spelled, after trimming surrounding whitespace. A CIDR the namespace already lists with the same spelling returns `AlreadyExists` (HTTP 409 Conflict). A CIDR that does not parse, a range covering an entire address space (`/0`), or a list already holding 100 entries returns `InvalidArgument` (HTTP 400). While the list is enforced, a caller whose own address it excludes receives `PermissionDenied` (HTTP 403).
+The CIDR is stored as spelled, after trimming surrounding whitespace. A CIDR the namespace already lists with the same spelling returns `AlreadyExists` (HTTP 409 Conflict). A CIDR that does not parse, a range covering an entire address space (`/0`), or a list already holding 1,000 entries returns `InvalidArgument` (HTTP 400). While the list is enforced, a caller whose own address it excludes receives `PermissionDenied` (HTTP 403).
 
 The caller must be a Cursor user credential holding `namespace:settings:write`. App and installation tokens are not accepted.
 
@@ -14279,7 +14394,7 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only push-time rule types, such as `deletion` and `non_fast_forward`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
 
 `bypassActors` array
 
@@ -14657,7 +14772,7 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only push-time rule types, such as `deletion` and `non_fast_forward`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
 
 `bypassActors` array
 
@@ -15294,7 +15409,7 @@ The five `installation.*` events go to the app itself rather than to a repositor
 
 A new app subscribes to none of the repository-scoped events. Select the ones you need in the app's settings, or set them with the `events` field of [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app) or [Update App](https://cursor.com/docs/api/origin/llms-full.txt#update-app). Origin delivers an event only to apps subscribed to it, with a webhook URL set, whose installation covers the repository and holds the scope the event requires. Otherwise there's no delivery and no error: nothing is sent, and nothing appears in [List Webhook Deliveries](https://cursor.com/docs/api/origin/llms-full.txt#list-webhook-deliveries).
 
-Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories and to outbound mirrors are delivered as usual, and the mirror state does not affect any other event. `repository.deleted` is delivered for a repository mirrored from GitHub: stopping the sync deletes the Cursor-side repository only, and GitHub sends nothing for it.
+Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories are delivered as usual, and the mirror state does not affect any other event. `repository.deleted` is delivered for a repository mirrored from GitHub: stopping the sync deletes the Cursor-side repository only, and GitHub sends nothing for it.
 
 ### Event payloads
 
@@ -15372,7 +15487,7 @@ Opaque repository identifier assigned by the source.
 
 `repository.mirror.status` string
 
-Effective direction during a transition, until cutover completes. One of `inbound`, `outbound`.
+Effective direction during a transition, until cutover completes. One of `inbound`.
 
 `repository.visibility` string
 
@@ -15732,7 +15847,7 @@ Opaque repository identifier assigned by the source.
 
 `repository.mirror.status` string
 
-Effective direction during a transition, until cutover completes. One of `inbound`, `outbound`.
+Effective direction during a transition, until cutover completes. One of `inbound`.
 
 `repository.visibility` string
 
@@ -17089,6 +17204,10 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkSuite.actor.serviceAccount.id` string
 
+`checkSuite.baseSha` string
+
+The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
+
 `checkRun` object
 
 The check run snapshot at this lifecycle point.
@@ -17290,6 +17409,10 @@ The app's registered display name, never empty when present. Omitted on payloads
 `checkRun.rerequestedBy.serviceAccount` object
 
 `checkRun.rerequestedBy.serviceAccount.id` string
+
+`checkRun.baseSha` string
+
+The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
 
 **Sample `event.payload`:**
 
@@ -17508,6 +17631,10 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkSuite.actor.serviceAccount.id` string
 
+`checkSuite.baseSha` string
+
+The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
+
 `checkRun` object
 
 The re-requested check run (`status: rerequested`); `check_run.rerequested_at` records the stamp and `check_run.rerequested_by` the principal that asked.
@@ -17710,6 +17837,10 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkRun.rerequestedBy.serviceAccount.id` string
 
+`checkRun.baseSha` string
+
+The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
+
 **Sample `event.payload`:**
 
 ```json
@@ -17902,6 +18033,10 @@ Number of annotations the request appended.
 `createdAt` string
 
 When the batch was appended. RFC 3339 timestamp.
+
+`baseSha` string
+
+The comparison base the check run was reported against (lowercase hex), when its app supplied one; absent means base-agnostic (see `CheckRun.base_sha`).
 
 **Sample `event.payload`:**
 
