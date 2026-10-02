@@ -330,26 +330,26 @@ Webhook signatures do not carry a key ID, so verification should try each active
 
 Request only the minimum scopes your app needs. `repository:metadata:read` and app or installation metadata access are granted automatically and should not be added separately to installation URLs.
 
-| Scope                                    | Allows                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `repository:metadata:read`               | Read repository metadata and a collaborator's permission on a repository. Added automatically.                                                                                                                                                                                                                                       |
-| `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Search file text. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source.                                                                                                          |
-| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints. Re-request a check run.                                                                                                                                                                                            |
-| `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, assigned labels, and merge eligibility.                                                                                                                                                                                                                                     |
-| `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                                                                                                                                                                                              |
-| `repository:pull_requests:reviews:read`  | Read pull request comments, comment threads, submitted reviews, and requested reviewers.                                                                                                                                                                                                                                             |
-| `repository:pull_requests:reviews:write` | Create and update comments; resolve and reopen comment threads; create, update, and dismiss reviews; request and remove reviewers.                                                                                                                                                                                                   |
-| `repository:checks:read`                 | Read check suites, runs, and check run annotations.                                                                                                                                                                                                                                                                                  |
-| `repository:checks:write`                | Create and update check suites and runs. Append check run annotations.                                                                                                                                                                                                                                                               |
-| `repository:labels:read`                 | Read the label definitions a repository owns.                                                                                                                                                                                                                                                                                        |
-| `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                                                                                                                                                                                             |
-| `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                                                                                                                                                                                            |
-| `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                                                                                                                                                                                                      |
-| `repository:settings:read`               | Read the grants held directly on a repository.                                                                                                                                                                                                                                                                                       |
-| `repository:settings:write`              | Update repository settings: the default branch, visibility, merge methods, and automatic head-branch deletion. Upsert and delete grants on a repository.                                                                                                                                                                             |
-| `namespace:settings:read`                | Read the grants held directly on an owner. Read the SSH certificate authorities an owner trusts and whether it requires certificates. Read a namespace's inbound IP allowlist and its entries.                                                                                                                                       |
-| `namespace:settings:write`               | Upsert and delete grants on an owner. Add and remove SSH certificate authorities and set whether the owner requires certificates. Add, update, and remove inbound IP allowlist entries and set whether the namespace enforces its allowlist. The certificate authority and allowlist writes are carried by a Cursor user credential. |
-| `namespace:user_tokens:write`            | Mint installation user tokens that act as a member of the installation's namespace. A token can't carry this scope. See [Acting on behalf of users](https://cursor.com/docs/api/origin/acting-as-users.md).                                                                                                                          |
+| Scope                                    | Allows                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository:metadata:read`               | Read repository metadata and a collaborator's permission on a repository. Added automatically.                                                                                                                                                                                                                                                |
+| `repository:contents:read`               | Read commits, branches, contents, comparison files, and low-level Git objects. Search file text. Download a repository archive. Clone, fetch, and pull over Git HTTPS. Sync a mirrored repository from its upstream source.                                                                                                                   |
+| `repository:contents:write`              | Push over Git HTTPS. Merge pull requests. Create branches and commit file changes through the Git data endpoints. Re-request a check run.                                                                                                                                                                                                     |
+| `repository:pull_requests:read`          | Read pull requests, changed files, pull request commits, assigned labels, and merge eligibility.                                                                                                                                                                                                                                              |
+| `repository:pull_requests:write`         | Create and update pull requests. Assign and remove pull request labels.                                                                                                                                                                                                                                                                       |
+| `repository:pull_requests:reviews:read`  | Read pull request comments, comment threads, submitted reviews, and requested reviewers.                                                                                                                                                                                                                                                      |
+| `repository:pull_requests:reviews:write` | Create and update comments; resolve and reopen comment threads; create, update, and dismiss reviews; request and remove reviewers.                                                                                                                                                                                                            |
+| `repository:checks:read`                 | Read check suites, runs, and check run annotations.                                                                                                                                                                                                                                                                                           |
+| `repository:checks:write`                | Create and update check suites and runs. Append check run annotations.                                                                                                                                                                                                                                                                        |
+| `repository:labels:read`                 | Read the label definitions a repository owns.                                                                                                                                                                                                                                                                                                 |
+| `repository:labels:write`                | Create, update, and delete repository label definitions.                                                                                                                                                                                                                                                                                      |
+| `repository:rulesets:read`               | Read repository rulesets.                                                                                                                                                                                                                                                                                                                     |
+| `repository:rulesets:write`              | Create, update, and delete repository rulesets.                                                                                                                                                                                                                                                                                               |
+| `repository:settings:read`               | Read the grants held directly on a repository.                                                                                                                                                                                                                                                                                                |
+| `repository:settings:write`              | Update repository settings: the default branch, visibility, merge methods, and automatic head-branch deletion. Upsert and delete grants on a repository.                                                                                                                                                                                      |
+| `namespace:settings:read`                | Read the grants held directly on an owner. Read the SSH certificate authorities an owner trusts and whether it requires certificates. Read a namespace's inbound IP allowlist and its entries.                                                                                                                                                |
+| `namespace:settings:write`               | Upsert and delete grants on an owner. Add and remove SSH certificate authorities and set whether the owner requires certificates. Add, update, remove, and replace inbound IP allowlist entries and set whether the namespace enforces its allowlist. The certificate authority and allowlist writes are carried by a Cursor user credential. |
+| `namespace:user_tokens:write`            | Mint installation user tokens that act as a member of the installation's namespace. A token can't carry this scope. See [Acting on behalf of users](https://cursor.com/docs/api/origin/acting-as-users.md).                                                                                                                                   |
 
 Requesting a `:write` scope also grants the matching `:read` scope, so `repository:labels:write` covers `repository:labels:read` and you do not have to list both. The reverse does not hold: a read scope never grants writes.
 
@@ -388,12 +388,12 @@ The Origin API uses a shared per-principal point budget that resets on a rolling
 
 Every endpoint charges a fixed cost against that budget before the handler runs. Authentication and authorization failures are not charged.
 
-| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball), and [Grep Contents](https://cursor.com/docs/api/origin/llms-full.txt#grep-contents) |
-| 10   | [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app), [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request), [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability), and [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror)                |
+| Cost | Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | [Get Rate Limit](https://cursor.com/docs/api/origin/llms-full.txt#get-rate-limit). Status only; does not consume points.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 1    | Most read endpoints, plus [Create Installation Access Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-access-token)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 5    | Ordinary writes, plus these heavier reads: [Get Commit](https://cursor.com/docs/api/origin/llms-full.txt#get-commit), [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files), [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files), [List Pull Request Files](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-files), [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball), and [Grep Contents](https://cursor.com/docs/api/origin/llms-full.txt#grep-contents)                                                                                                                 |
+| 10   | [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app), [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo), [Create Commit From Files](https://cursor.com/docs/api/origin/llms-full.txt#create-commit-from-files), [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request), [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability), [Replace Inbound IP Allowlist Entries](https://cursor.com/docs/api/origin/llms-full.txt#replace-inbound-ip-allowlist-entries), and [Transition Repo Mirror](https://cursor.com/docs/api/origin/migrations.md#transition-repo-mirror) |
 
 Cursor can raise per-app minute budgets for design partners. Contact Cursor if your integration needs a higher limit.
 
@@ -3253,6 +3253,10 @@ Repo name, unique to the owner entity.
 
 Head commit SHA the check run is reported against (40- or 64-char hex).
 
+`baseSha` string
+
+Comparison base the check run was evaluated against (40- or 64-character hex): a pull request version's `baseSha`. It is part of the check suite and check run identity, so posting the same `externalId` and `key` against another base creates a separate attempt instead of overwriting the first. Omit it for a base-agnostic run; a later post must repeat the same value to address the same attempt. An empty string returns `InvalidArgument` (HTTP 400).
+
 `checkSuite` object Required
 
 The suite the check run belongs to; upserted alongside the check run.
@@ -3337,10 +3341,6 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
-`baseSha` string
-
-Comparison base the check run was evaluated against (40- or 64-character hex): a pull request version's `baseSha`. It is part of the check suite and check run identity, so posting the same `externalId` and `key` against another base creates a separate attempt instead of overwriting the first. Omit it for a base-agnostic run; a later post must repeat the same value to address the same attempt. An empty string returns `InvalidArgument` (HTTP 400).
-
 #### Response Fields
 
 `checkSuite` object
@@ -3382,6 +3382,10 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 `checkSuite.sha` string
 
 Commit SHA to which the suite is attached.
+
+`checkSuite.baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `checkSuite.key` string
 
@@ -3451,10 +3455,6 @@ Service account variant of the actor. Set when a service account performed the a
 
 Public identifier for the service account.
 
-`checkSuite.baseSha` string
-
-Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
-
 `checkRun` object
 
 The upserted check run.
@@ -3502,6 +3502,10 @@ Server-assigned identifier of the containing check suite.
 `checkRun.sha` string
 
 Commit SHA to which the run is attached.
+
+`checkRun.baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `checkRun.key` string
 
@@ -3622,10 +3626,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRun.rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`checkRun.baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `outcome` string
 
@@ -3764,6 +3764,10 @@ Repo name, unique to the owner entity.
 
 Head commit SHA the check runs are reported against (40- or 64-char hex).
 
+`baseSha` string
+
+Comparison base every check run in this request was evaluated against (40- or 64-character hex); see `baseSha` on [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run). Omit it for base-agnostic runs. An empty string returns `InvalidArgument` (HTTP 400).
+
 `checkSuite` object Required
 
 The suite shared by every check run in this request.
@@ -3848,10 +3852,6 @@ Deadline for the check run, as an RFC 3339 timestamp. Values more than 24 hours 
 
 Declares that the run can be run again on request. Setting it to `true` commits your app to subscribing to [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events) and answering each delivery by posting a fresh run for the same head SHA and `key`: either a new run under a new `externalId`, which keeps the old attempt as history, or an update of the re-requested run under the same `externalId`, which refreshes it in place. Until that fresh post arrives the re-requested run reads as pending in the commit's latest check state, so a required check blocks merging and the pull request shows the run as awaiting its re-run; declaring re-requestability without answering strands the check. Origin does not verify the subscription when you post. Omit it to keep the stored value, which is `false` on a new run; send `false` to withdraw the declaration.
 
-`baseSha` string
-
-Comparison base every check run in this request was evaluated against (40- or 64-character hex); see `baseSha` on [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run). Omit it for base-agnostic runs. An empty string returns `InvalidArgument` (HTTP 400).
-
 #### Response Fields
 
 `checkSuite` object
@@ -3893,6 +3893,10 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 `checkSuite.sha` string
 
 Commit SHA to which the suite is attached.
+
+`checkSuite.baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `checkSuite.key` string
 
@@ -3962,10 +3966,6 @@ Service account variant of the actor. Set when a service account performed the a
 
 Public identifier for the service account.
 
-`checkSuite.baseSha` string
-
-Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
-
 `checkRuns` array
 
 Deprecated: read `results[].checkRun` instead. Still populated, in request order.
@@ -4013,6 +4013,10 @@ Server-assigned identifier of the containing check suite.
 `checkRuns[].sha` string
 
 Commit SHA to which the run is attached.
+
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `checkRuns[].key` string
 
@@ -4133,10 +4137,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRuns[].rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`checkRuns[].baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `results` array
 
@@ -4369,6 +4369,10 @@ Server-assigned identifier of the containing check suite.
 
 Commit SHA to which the run is attached.
 
+`baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 `key` string
 
 Stable app-chosen logical run identity; required checks may match on app, suite key, and this key.
@@ -4488,10 +4492,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 ```bash
 curl --request GET \
@@ -4941,6 +4941,10 @@ Server-assigned identifier of the containing check suite.
 
 Commit SHA to which the run is attached.
 
+`baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 `key` string
 
 Stable app-chosen logical run identity; required checks may match on app, suite key, and this key.
@@ -5060,10 +5064,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 ```bash
 curl --request POST \
@@ -5185,6 +5185,10 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 
 Commit SHA to which the suite is attached.
 
+`baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
+
 `key` string
 
 Stable app-chosen required-check identity. Required checks match on app plus this key, not name.
@@ -5252,10 +5256,6 @@ Service account variant of the actor. Set when a service account performed the a
 `actor.serviceAccount.id` string
 
 Public identifier for the service account.
-
-`baseSha` string
-
-Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 ```bash
 curl --request GET \
@@ -5377,6 +5377,10 @@ Server-assigned identifier of the containing check suite.
 
 Commit SHA to which the run is attached.
 
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 `checkRuns[].key` string
 
 Stable app-chosen logical run identity; required checks may match on app, suite key, and this key.
@@ -5496,10 +5500,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRuns[].rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`checkRuns[].baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `nextPageToken` string
 
@@ -5652,6 +5652,10 @@ Server-assigned identifier of the containing check suite.
 
 Commit SHA to which the run is attached.
 
+`checkRuns[].baseSha` string
+
+Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
+
 `checkRuns[].key` string
 
 Stable app-chosen logical run identity; required checks may match on app, suite key, and this key.
@@ -5771,10 +5775,6 @@ RFC 3339 timestamp of the outstanding re-request. Absent when no re-request is p
 `checkRuns[].rerequestedBy` object
 
 Principal that asked for the re-run, carrying the same actor variants as `actor`. Present whenever `rerequestedAt` is set, and cleared together with it.
-
-`checkRuns[].baseSha` string
-
-Comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `baseSha`. Absent for a base-agnostic run.
 
 `nextPageToken` string
 
@@ -5909,6 +5909,10 @@ Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when 
 
 Commit SHA to which the suite is attached.
 
+`checkSuites[].baseSha` string
+
+Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
+
 `checkSuites[].key` string
 
 Stable app-chosen required-check identity. Required checks match on app plus this key, not name.
@@ -5976,10 +5980,6 @@ Service account variant of the actor. Set when a service account performed the a
 `checkSuites[].actor.serviceAccount.id` string
 
 Public identifier for the service account.
-
-`checkSuites[].baseSha` string
-
-Comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `baseSha`. It is part of the attempt's identity, so an app can report one attempt per head and base pair. Absent for a base-agnostic attempt, which applies to every pull request at `sha`.
 
 `nextPageToken` string
 
@@ -8709,11 +8709,11 @@ curl --request DELETE \
 
 ## Inbound IP allowlist
 
-A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. These endpoints read the list, turn enforcement on or off, and add, update, and remove entries. Allowlists are available on team namespaces.
+A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. These endpoints read the list, turn enforcement on or off, add, update, and remove entries, and replace the whole entry set. Allowlists are available on team namespaces.
 
 Each entry is an IPv4 or IPv6 address or CIDR range with its own opaque `id`. The entry endpoints address an entry by that ID as `entryId`, and the ID stays the same when [Update Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/llms-full.txt#update-inbound-ip-allowlist-entry) changes the entry's `cidr`. A namespace lists at most 1,000 entries, and a disabled entry stays listed but admits nothing.
 
-Reading the list and its entries accepts installation and user tokens holding `namespace:settings:read`. Turning enforcement on or off and adding, updating, and removing entries take a Cursor user credential holding `namespace:settings:write`; app and installation tokens are not accepted. Enabling enforcement, an update, or a removal that would exclude the caller's own address returns `InvalidArgument` (HTTP 400), and a write from a caller an enforced list already excludes returns `PermissionDenied` (HTTP 403).
+Reading the list and its entries accepts installation and user tokens holding `namespace:settings:read`. Turning enforcement on or off and adding, updating, removing, and replacing entries take a Cursor user credential holding `namespace:settings:write`; app and installation tokens are not accepted. Enabling enforcement, an update, or a removal that would exclude the caller's own address returns `InvalidArgument` (HTTP 400), and a write from a caller an enforced list already excludes returns `PermissionDenied` (HTTP 403).
 
 ### Get Inbound IP Allowlist
 
@@ -8760,6 +8760,10 @@ Whether the entry admits its addresses. A disabled entry stays listed but admits
 `entries[].createdAt` string
 
 RFC 3339 timestamp for when the entry was added.
+
+`etag` string
+
+Fingerprint of the entry set. It changes whenever an entry is added, updated, or removed; turning enforcement on or off doesn't change it. Pass it to [Replace Inbound IP Allowlist Entries](https://cursor.com/docs/api/origin/llms-full.txt#replace-inbound-ip-allowlist-entries) to reject the replace if the entries changed since this read.
 
 ```bash
 curl --request GET \
@@ -8844,6 +8848,10 @@ Whether the entry admits its addresses. A disabled entry stays listed but admits
 `entries[].createdAt` string
 
 RFC 3339 timestamp for when the entry was added.
+
+`etag` string
+
+Fingerprint of the entry set. It changes whenever an entry is added, updated, or removed; turning enforcement on or off doesn't change it. Pass it to [Replace Inbound IP Allowlist Entries](https://cursor.com/docs/api/origin/llms-full.txt#replace-inbound-ip-allowlist-entries) to reject the replace if the entries changed since this read.
 
 ```bash
 curl --request PATCH \
@@ -9129,6 +9137,135 @@ curl --request PATCH \
   "description": "Office, east wing",
   "enabled": true,
   "createdAt": "2026-08-02T14:45:00Z"
+}
+```
+
+### Replace Inbound IP Allowlist Entries
+
+POST
+
+`/v1/origin/namespaces/{namespaceSlug}/inbound-ip-allowlist/entries:replace`
+
+Requires scope `namespace:settings:write` (user access token).
+
+Replaces the namespace's allowlist entries with the full set you send and returns the allowlist.
+
+Origin matches entries by `cidr` exactly as typed, after trimming surrounding whitespace. CIDRs aren't normalized, so `10.0.0.1/8` and `10.0.0.0/8` are different entries. A matched entry keeps its `id` and `createdAt` and takes the `description` and `enabled` you send, a new CIDR is added, and a stored entry you leave out is deleted. The call doesn't change whether the list is enforced; use [Update Inbound IP Allowlist](https://cursor.com/docs/api/origin/llms-full.txt#update-inbound-ip-allowlist) for that. The replace is all or nothing. In the response, kept entries come first, then new entries in request order.
+
+Each call costs 10 points, however many entries it sends. To manage a large list, or to sync one from Terraform, send the whole set here instead of one call per entry.
+
+The caller must be a Cursor user credential holding `namespace:settings:write` with admin permission on the namespace. App and installation tokens and service accounts are not accepted.
+
+| Status                         | When                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InvalidArgument` (HTTP 400)   | A `cidr` doesn't parse, is a `/0` range, or is listed twice with the same trimmed spelling, a `description` is over 255 characters, there are more than 1,000 entries, `entries` is empty without `allowEmpty`, or the set would exclude your own address from an enforced list. Each problem is a `BadRequest` field violation naming its index, for example `entries[3]`. |
+| `PermissionDenied` (HTTP 403)  | The caller isn't a namespace admin, is a service account, or is already excluded by the enforced list.                                                                                                                                                                                                                                                                      |
+| `Aborted` (HTTP 409 Conflict)  | `etag` doesn't match the current entries, or the entries changed during the replace. Read the allowlist again and retry.                                                                                                                                                                                                                                                    |
+| `ResourceExhausted` (HTTP 429) | The [rate limit](https://cursor.com/docs/api/origin/llms-full.txt#rate-limits) is exceeded.                                                                                                                                                                                                                                                                                 |
+
+#### Path Parameters
+
+`namespaceSlug` string Required
+
+Namespace slug.
+
+#### Request Body
+
+`entries` array
+
+The complete set of entries the list should hold, at most 1,000.
+
+`entries[].cidr` string Required
+
+IPv4 or IPv6 address or CIDR range, subject to the same rules as `cidr` on [Add Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/llms-full.txt#add-inbound-ip-allowlist-entry). Stored as typed after trimming, with no normalization. Each spelling can appear once.
+
+`entries[].description` string
+
+Label for the entry, at most 255 characters.
+
+`entries[].enabled` boolean
+
+Whether the entry admits its addresses. Defaults to `true` when omitted.
+
+`etag` string
+
+`etag` from a prior read of the allowlist. When set and the entries have changed since, the call returns `Aborted` (HTTP 409 Conflict) and changes nothing. Omit to replace whatever is stored.
+
+`allowEmpty` boolean
+
+Set to `true` to send an empty `entries`, which deletes every entry. Without it, an empty `entries` returns `InvalidArgument` (HTTP 400).
+
+#### Response Fields
+
+`allowlist` object
+
+The allowlist after the replace, in the same shape [Get Inbound IP Allowlist](https://cursor.com/docs/api/origin/llms-full.txt#get-inbound-ip-allowlist) returns: `enabled`, `entries[]`, and the new `etag`.
+
+`addedCount` integer
+
+Entries added.
+
+`updatedCount` integer
+
+Stored entries whose `description` or `enabled` changed.
+
+`removedCount` integer
+
+Stored entries deleted because the request left them out.
+
+`unchangedCount` integer
+
+Stored entries kept as they were. All four counts are always present, including when they're `0`.
+
+```bash
+curl --request POST \
+  --url 'https://api.cursor.com/v1/origin/namespaces/NAMESPACE_SLUG/inbound-ip-allowlist/entries:replace' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "entries": [
+    {
+      "cidr": "203.0.113.0/24",
+      "description": "Office"
+    },
+    {
+      "cidr": "198.51.100.7",
+      "description": "VPN egress",
+      "enabled": false
+    }
+  ],
+  "etag": "8d41e07c2b9f3a65d1c4e8b07a2f9c13"
+}'
+```
+
+**Response shape:**
+
+```json
+{
+  "allowlist": {
+    "enabled": true,
+    "entries": [
+      {
+        "id": "nsip_01k2ja2000e0080000000000c4",
+        "cidr": "203.0.113.0/24",
+        "description": "Office",
+        "enabled": true,
+        "createdAt": "2026-08-02T14:45:00Z"
+      },
+      {
+        "id": "nsip_01k2ja2000e0080000000000c6",
+        "cidr": "198.51.100.7",
+        "description": "VPN egress",
+        "enabled": false,
+        "createdAt": "2026-08-04T11:20:00Z"
+      }
+    ],
+    "etag": "3f2c9a7b1e5d4c08a6b2f1e9d7c3a5b4"
+  },
+  "addedCount": 1,
+  "updatedCount": 0,
+  "removedCount": 2,
+  "unchangedCount": 1
 }
 ```
 
@@ -14210,11 +14347,11 @@ Stable Origin ID for this rule.
 
 `rulesets[].rules[].ruleType` string
 
-Rule type, for example `pull_request`, `require_status_checks`, `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
 
 `rulesets[].rules[].parameters` object
 
-Type-specific parameters as a JSON object. The shape depends on `rulesets[].rules[].ruleType`.
+Type-specific parameters as a JSON object. The shape depends on `rulesets[].rules[].ruleType`; [Create Ruleset](https://cursor.com/docs/api/origin/llms-full.txt#create-ruleset) lists the parameters of each rule type.
 
 `rulesets[].bypassActors` array
 
@@ -14394,7 +14531,71 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only push-time rule types, such as `deletion` and `non_fast_forward`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+
+`rules[].ruleType` string Required
+
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
+
+`rules[].parameters` object
+
+Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`, and unknown keys are rejected. `require_branch_up_to_date`, `deletion`, `non_fast_forward`, `block_merges`, and `required_linear_history` take no parameters: send `{}` or omit `parameters`. `pull_request` parameters are also accepted in snake\_case, such as `required_approving_review_count`; the camelCase key wins when both are sent.
+
+`rules[].parameters.requiredApprovingReviewCount` integer
+
+For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1.
+
+`rules[].parameters.requireCodeOwnerReview` boolean
+
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. Defaults to `false`.
+
+`rules[].parameters.dismissStaleReviewsOnPush` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requireLastPushApproval` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requiredReviewThreadResolution` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requiredChecks` array
+
+For `require_status_checks` rules, where it's required: checks that must all pass on the pull request's head commit before it can merge. An empty list requires nothing. Entries that repeat the same `actorKind`, `actorId`, `groupKey`, and `runKey` are rejected. A check is named by the actor that reports it and the keys it reports under, never by a display name or context string, and every value must be a non-empty string.
+
+`rules[].parameters.requiredChecks[].actorKind` string
+
+Kind of the check suite's `actor`: `app`, `service_account`, or `user`. Required in each entry.
+
+`rules[].parameters.requiredChecks[].actorId` string
+
+The actor's ID exactly as the check suite's `actor` reports it, such as `app_…`, `sa_…`, or `user_…`. A bare UUID or an ID containing `|` is rejected. An ID that names no actor is accepted but never matches, so the check reads as missing. Required in each entry.
+
+`rules[].parameters.requiredChecks[].groupKey` string
+
+The check suite `key` the actor reports. Required in each entry.
+
+`rules[].parameters.requiredChecks[].runKey` string
+
+A check run `key` in that suite. When set, only the newest run with this key must pass; when omitted, every run in the suite must pass. A run passes when it completes as `success`, `neutral`, or `skipped`.
+
+`rules[].parameters.requiredChecks[].name` string
+
+Label merge blockers show for this check in place of `actorKind/actorId/groupKey[/runKey]`. Matching ignores it.
+
+`rules[].parameters.blockDirectUpdates` boolean
+
+For `block_direct_updates` rules: when `true`, a targeted ref can be created or updated only by merging a pull request. When `false`, the rule has no effect. Defaults to `true`.
+
+`rules[].parameters.pattern` string
+
+For `ref_name_pattern` rules, where it's required: an RE2 regular expression, 1 to 1024 characters. A created or updated branch or tag name, without `refs/heads/` or `refs/tags/`, must match it. A match anywhere in the name counts; anchor the pattern with `^` and `$` to match the whole name.
+
+`rules[].parameters.negate` boolean
+
+For `ref_name_pattern` rules: when `true`, the name must not match `pattern`. Defaults to `false`.
 
 `bypassActors` array
 
@@ -14440,11 +14641,11 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type, for example `pull_request`, `require_status_checks`, `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
 
 `rules[].parameters` object
 
-Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`.
+Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`; [Create Ruleset](https://cursor.com/docs/api/origin/llms-full.txt#create-ruleset) lists the parameters of each rule type.
 
 `bypassActors` array
 
@@ -14625,11 +14826,11 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type, for example `pull_request`, `require_status_checks`, `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
 
 `rules[].parameters` object
 
-Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`.
+Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`; [Create Ruleset](https://cursor.com/docs/api/origin/llms-full.txt#create-ruleset) lists the parameters of each rule type.
 
 `bypassActors` array
 
@@ -14772,7 +14973,71 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only push-time rule types, such as `deletion` and `non_fast_forward`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+
+`rules[].ruleType` string Required
+
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
+
+`rules[].parameters` object
+
+Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`, and unknown keys are rejected. `require_branch_up_to_date`, `deletion`, `non_fast_forward`, `block_merges`, and `required_linear_history` take no parameters: send `{}` or omit `parameters`. `pull_request` parameters are also accepted in snake\_case, such as `required_approving_review_count`; the camelCase key wins when both are sent.
+
+`rules[].parameters.requiredApprovingReviewCount` integer
+
+For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1.
+
+`rules[].parameters.requireCodeOwnerReview` boolean
+
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. Defaults to `false`.
+
+`rules[].parameters.dismissStaleReviewsOnPush` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requireLastPushApproval` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requiredReviewThreadResolution` boolean
+
+For `pull_request` rules: not supported yet. `true` makes the rule fail for every pull request it applies to. Defaults to `false`.
+
+`rules[].parameters.requiredChecks` array
+
+For `require_status_checks` rules, where it's required: checks that must all pass on the pull request's head commit before it can merge. An empty list requires nothing. Entries that repeat the same `actorKind`, `actorId`, `groupKey`, and `runKey` are rejected. A check is named by the actor that reports it and the keys it reports under, never by a display name or context string, and every value must be a non-empty string.
+
+`rules[].parameters.requiredChecks[].actorKind` string
+
+Kind of the check suite's `actor`: `app`, `service_account`, or `user`. Required in each entry.
+
+`rules[].parameters.requiredChecks[].actorId` string
+
+The actor's ID exactly as the check suite's `actor` reports it, such as `app_…`, `sa_…`, or `user_…`. A bare UUID or an ID containing `|` is rejected. An ID that names no actor is accepted but never matches, so the check reads as missing. Required in each entry.
+
+`rules[].parameters.requiredChecks[].groupKey` string
+
+The check suite `key` the actor reports. Required in each entry.
+
+`rules[].parameters.requiredChecks[].runKey` string
+
+A check run `key` in that suite. When set, only the newest run with this key must pass; when omitted, every run in the suite must pass. A run passes when it completes as `success`, `neutral`, or `skipped`.
+
+`rules[].parameters.requiredChecks[].name` string
+
+Label merge blockers show for this check in place of `actorKind/actorId/groupKey[/runKey]`. Matching ignores it.
+
+`rules[].parameters.blockDirectUpdates` boolean
+
+For `block_direct_updates` rules: when `true`, a targeted ref can be created or updated only by merging a pull request. When `false`, the rule has no effect. Defaults to `true`.
+
+`rules[].parameters.pattern` string
+
+For `ref_name_pattern` rules, where it's required: an RE2 regular expression, 1 to 1024 characters. A created or updated branch or tag name, without `refs/heads/` or `refs/tags/`, must match it. A match anywhere in the name counts; anchor the pattern with `^` and `$` to match the whole name.
+
+`rules[].parameters.negate` boolean
+
+For `ref_name_pattern` rules: when `true`, the name must not match `pattern`. Defaults to `false`.
 
 `bypassActors` array
 
@@ -14818,11 +15083,11 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type, for example `pull_request`, `require_status_checks`, `require_branch_up_to_date`, `deletion`, or `non_fast_forward`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
 
 `rules[].parameters` object
 
-Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`.
+Type-specific parameters as a JSON object. The shape depends on `rules[].ruleType`; [Create Ruleset](https://cursor.com/docs/api/origin/llms-full.txt#create-ruleset) lists the parameters of each rule type.
 
 `bypassActors` array
 
@@ -17136,6 +17401,10 @@ Unique ID of the owner namespace.
 
 Resolved head commit SHA the suite is attached to (lowercase hex).
 
+`checkSuite.baseSha` string
+
+The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
+
 `checkSuite.key` string
 
 App-chosen idempotency key for the suite.
@@ -17204,10 +17473,6 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkSuite.actor.serviceAccount.id` string
 
-`checkSuite.baseSha` string
-
-The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
-
 `checkRun` object
 
 The check run snapshot at this lifecycle point.
@@ -17249,6 +17514,10 @@ Suite this check run belongs to.
 `checkRun.sha` string
 
 Resolved head commit SHA the check run is attached to (lowercase hex).
+
+`checkRun.baseSha` string
+
+The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
 
 `checkRun.key` string
 
@@ -17409,10 +17678,6 @@ The app's registered display name, never empty when present. Omitted on payloads
 `checkRun.rerequestedBy.serviceAccount` object
 
 `checkRun.rerequestedBy.serviceAccount.id` string
-
-`checkRun.baseSha` string
-
-The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
 
 **Sample `event.payload`:**
 
@@ -17563,6 +17828,10 @@ Unique ID of the owner namespace.
 
 Resolved head commit SHA the suite is attached to (lowercase hex).
 
+`checkSuite.baseSha` string
+
+The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
+
 `checkSuite.key` string
 
 App-chosen idempotency key for the suite.
@@ -17631,10 +17900,6 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkSuite.actor.serviceAccount.id` string
 
-`checkSuite.baseSha` string
-
-The comparison base this attempt was reported against (lowercase hex), when the reporting app supplied one: a pull request version's `base_sha`. Part of the attempt's identity, so one app can report one attempt per (head, base) pair. Absent means the attempt is base-agnostic and applies to every pull request at `sha`. A pull request's CI state and required checks consider only base-agnostic attempts and the ones reported against that pull request's latest version `base_sha`; commit-scoped listings (`ListCheckSuitesForCommit`, `ListCheckRunsForCommit`) return every base.
-
 `checkRun` object
 
 The re-requested check run (`status: rerequested`); `check_run.rerequested_at` records the stamp and `check_run.rerequested_by` the principal that asked.
@@ -17676,6 +17941,10 @@ Suite this check run belongs to.
 `checkRun.sha` string
 
 Resolved head commit SHA the check run is attached to (lowercase hex).
+
+`checkRun.baseSha` string
+
+The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
 
 `checkRun.key` string
 
@@ -17837,10 +18106,6 @@ The app's registered display name, never empty when present. Omitted on payloads
 
 `checkRun.rerequestedBy.serviceAccount.id` string
 
-`checkRun.baseSha` string
-
-The comparison base this run was reported against (lowercase hex), when the reporting app supplied one; always the owning suite's `base_sha`. Absent means base-agnostic (see `CheckSuite.base_sha`).
-
 **Sample `event.payload`:**
 
 ```json
@@ -17980,6 +18245,10 @@ Suite the check run belongs to.
 
 Resolved head commit SHA the check run is attached to (lowercase hex).
 
+`baseSha` string
+
+The comparison base the check run was reported against (lowercase hex), when its app supplied one; absent means base-agnostic (see `CheckRun.base_sha`).
+
 `annotations` array
 
 The appended annotations, in request order. May be shorter than annotations\_count when Origin capped the list.
@@ -18033,10 +18302,6 @@ Number of annotations the request appended.
 `createdAt` string
 
 When the batch was appended. RFC 3339 timestamp.
-
-`baseSha` string
-
-The comparison base the check run was reported against (lowercase hex), when its app supplied one; absent means base-agnostic (see `CheckRun.base_sha`).
 
 **Sample `event.payload`:**
 

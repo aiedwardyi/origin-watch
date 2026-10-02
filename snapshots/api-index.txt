@@ -150,6 +150,7 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Get Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/reference/get-inbound-ip-allowlist-entry.md)
 - [Delete Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/reference/delete-inbound-ip-allowlist-entry.md)
 - [Update Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/reference/update-inbound-ip-allowlist-entry.md)
+- [Replace Inbound IP Allowlist Entries](https://cursor.com/docs/api/origin/reference/replace-inbound-ip-allowlist-entries.md)
 
 ## Labels
 
