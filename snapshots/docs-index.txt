@@ -13,3 +13,4 @@
 - https://cursor.com/docs/origin/settings.md
 - https://cursor.com/docs/origin/codebase-settings.md
 - https://cursor.com/docs/origin/integrations.md
+- https://cursor.com/docs/origin/apps/publish.md
