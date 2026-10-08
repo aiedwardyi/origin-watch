@@ -2,8 +2,6 @@
 
 Origin is currently released in early beta. You can create repos, push and pull with git, mirror from GitHub, browse and search code, open and merge pull requests, and share with your Cursor team.
 
-Please submit any and all feedback to [hi@cursor.com](mailto:hi@cursor.com) to help us make the product better.
-
 Origin is Cursor's git forge for storing and sharing code. Use it to host repositories, sync projects from GitHub, and browse your team's Origin repos in the browser.
 
 [Media](/docs-static/images/origin/create-and-push.mp4)
@@ -17,10 +15,10 @@ In early beta you can:
 - [Mirror a GitHub repository](https://cursor.com/docs/origin/mirror-github.md) into Origin
 - [Open, review, and merge pull requests](https://cursor.com/docs/origin/pull-requests.md)
 - [Browse and search](https://cursor.com/docs/origin/browse.md) code at [cursor.com/codebase](https://cursor.com/codebase)
-- Manage [repository settings](https://cursor.com/docs/origin/settings.md) and [codebase settings](https://cursor.com/docs/origin/codebase-settings.md)
-- Install [Origin Apps](https://cursor.com/docs/origin/settings.md#apps) from repository settings
-- Create private Origin Apps to build integrations on Origin through our [Public API](https://cursor.com/docs/api/origin.md)
-- Connect [automations and cloud agents](https://cursor.com/docs/origin/integrations.md) to Origin repos
+- Manage [repository settings](https://cursor.com/docs/origin/settings.md#repository-settings) and [codebase settings](https://cursor.com/docs/origin/settings.md#codebase-settings)
+- Install [Origin Apps](https://cursor.com/docs/origin/apps.md) from codebase settings
+- Create [private Origin Apps](https://cursor.com/docs/origin/apps/build-app.md) to build integrations on Origin through our [Public API](https://cursor.com/docs/api/origin.md)
+- Connect [automations and cloud agents](https://cursor.com/docs/origin/agents.md) to Origin repos
 - [Install the Origin CLI](https://cursor.com/docs/origin/cli.md) for terminal workflows
 
 ## Who can access
@@ -41,7 +39,7 @@ During the beta, you can't change or update your namespace after it's claimed. C
 - Admins can disable Origin for the team at any time from the dashboard
 - Teams on legacy privacy mode cannot enable Origin, so switch to [Privacy Mode](https://cursor.com/help/security-and-privacy/privacy.md#how-do-i-enable-privacy-mode) first if you want access
 
-Once the codebase name is claimed, admins can create repositories and grant repository access to the rest of the team from [codebase settings](https://cursor.com/docs/origin/codebase-settings.md#permissions).
+Once the codebase name is claimed, admins can create repositories and grant repository access to the rest of the team from [codebase settings](https://cursor.com/docs/origin/settings.md#permissions).
 
 ## Repo list
 
@@ -60,9 +58,9 @@ Repo icons show how each repo is hosted: Origin-hosted repos, and repos synced f
 - [Mirror a GitHub repo](https://cursor.com/docs/origin/mirror-github.md)
 - [Pull requests](https://cursor.com/docs/origin/pull-requests.md)
 - [Browse & Search](https://cursor.com/docs/origin/browse.md)
-- [Repository settings](https://cursor.com/docs/origin/settings.md)
-- [Codebase settings](https://cursor.com/docs/origin/codebase-settings.md)
-- [Integrations](https://cursor.com/docs/origin/integrations.md)
+- [Repository settings](https://cursor.com/docs/origin/settings.md#repository-settings)
+- [Codebase settings](https://cursor.com/docs/origin/settings.md#codebase-settings)
+- [Agents and automations](https://cursor.com/docs/origin/agents.md)
 
 
 ---

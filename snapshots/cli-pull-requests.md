@@ -2,8 +2,6 @@
 
 Origin is currently released in early beta. You can create repos, push and pull with git, mirror from GitHub, browse and search code, open and merge pull requests, and share with your Cursor team.
 
-Please submit any and all feedback to [hi@cursor.com](mailto:hi@cursor.com) to help us make the product better.
-
 Every `origin pr` subcommand with its options. For the rest of the CLI, see [Commands](https://cursor.com/docs/origin/cli/reference/commands.md). For how pull requests work in Origin, see [Pull requests](https://cursor.com/docs/origin/pull-requests.md).
 
 ## Targeting a pull request

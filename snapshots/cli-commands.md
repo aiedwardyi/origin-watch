@@ -2,8 +2,6 @@
 
 Origin is currently released in early beta. You can create repos, push and pull with git, mirror from GitHub, browse and search code, open and merge pull requests, and share with your Cursor team.
 
-Please submit any and all feedback to [hi@cursor.com](mailto:hi@cursor.com) to help us make the product better.
-
 Every `origin` command with its options, except pull requests, which have their own page: [Pull request commands](https://cursor.com/docs/origin/cli/reference/pull-requests.md). To see the same information in your terminal, run `origin --help` for the command list or `origin <group> --help` for one group. To install the CLI, see [Install the CLI](https://cursor.com/docs/origin/cli.md).
 
 The Origin CLI (`origin`) is separate from the Cursor Agent CLI (`agent`) documented under [CLI](https://cursor.com/docs/cli/overview.md).
