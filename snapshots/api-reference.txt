@@ -9773,7 +9773,7 @@ GET
 
 Requires scope `repository:pull_requests:read` (installation access token or user access token).
 
-Lists pull requests in a repo, optionally filtered by head branch, base branch, author, creation-time range, and state. Each pull request includes its assigned labels.
+Lists pull requests in a repo, optionally filtered by head branch, head commit, base branch, author, creation-time range, stack, labels, and state. Each pull request includes its assigned labels and, when it belongs to a stack, its `stack` membership.
 
 Results are sorted by creation order or by last update, selected with `sortBy`, most recent first. Set `direction=asc` for the other order. Page tokens embed the sort and the filters they were minted under, so a token replayed under a different sort or filter set is rejected; restart pagination when either changes.
 
@@ -9836,6 +9836,10 @@ Optional head commit filter: the full 40- or 64-character hex SHA of a pull requ
 `stackId` string
 
 Optional stack filter: a stack id as returned in `pullRequests[].stack.id`. Returns only that stack's members, in the requested sort order rather than stack order, so rebuild the stack from each member's `stack.parentPullRequest`. `state` still defaults to `open`, which excludes merged members; pass `state=all` for the whole stack. A well-formed id that names no stack in this repository returns an empty list, and any other value returns `InvalidArgument` (HTTP 400).
+
+`labels` array
+
+Optional label filter, in [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview). Repeat the parameter once per label name, as in `labels=bug&labels=security`. A comma is part of the name, so `labels=bug,security` names a single label. Returns only pull requests that carry every named label. Origin trims whitespace around each name and counts a repeated name once. Omit the parameter, or pass only blank values, for no filter. More than 10 names, a name longer than 50 characters, or a name that isn't a label in this repository returns an empty list. The other filters still apply, and `state` still defaults to `open`.
 
 #### Response Fields
 
@@ -12963,6 +12967,8 @@ Merges a pull request into its base.
 For a stacked pull request, merges the entire root-to-target prefix ending at this pull number, not only this pull. Supported only on native Origin repositories; mirrored repositories are rejected.
 
 The merge lands the head commit of the pull request's latest `version`. If the head branch has moved past that commit, for example because a push landed that Origin has not recorded as a new version yet, the request returns `Aborted` (HTTP 409 Conflict), the same answer as a stale `expectedHeadSha`, and nothing merges. Retry after [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) reports the new head in `version.headSha`.
+
+Merge Pull Request returns `FailedPrecondition` (HTTP 400), and nothing merges, when the pull request's base branch is the head branch of another open or draft pull request that it isn't stacked on, because the merge would land on that pull request's branch. For a stacked pull request, Origin checks the base of the stack's lowest unmerged pull request, where the merge lands. The repository's default branch never triggers this refusal, and neither does a base branch that an `active` `push_branch` ruleset with a `deletion` rule names in `includedRefNames`; a pattern that matches every branch, such as `~ALL`, doesn't count. Merge the other pull request first, or stack this one on it by setting `parentPullRequest` with [Update Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#update-pull-request). [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability) reports the same condition as a `needs_restack` blocker.
 
 #### Path Parameters
 
