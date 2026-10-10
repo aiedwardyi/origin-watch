@@ -193,6 +193,7 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Create Pull Request Review](https://cursor.com/docs/api/origin/reference/create-pull-request-review.md)
 - [Update Pull Request Review](https://cursor.com/docs/api/origin/reference/update-pull-request-review.md)
 - [Dismiss Pull Request Review](https://cursor.com/docs/api/origin/reference/dismiss-pull-request-review.md)
+- [Search Pull Requests](https://cursor.com/docs/api/origin/reference/search-pull-requests.md)
 
 ## Rulesets
 
