@@ -23,7 +23,7 @@ In early beta you can:
 
 ## Who can access
 
-Origin code storage is available on the Start, Pro, Pro+, Ultra, Teams, and Enterprise plans. It is not available on free plans. Access opens in stages, so you may not see Origin immediately after it becomes available for your plan.
+Origin code storage is available on Premium, Super, Ultra, Teams, and Enterprise, and on the legacy Start, Pro, Pro+, and Ultra plans. It is not available on Free or Plus.
 
 ## Privacy
 
