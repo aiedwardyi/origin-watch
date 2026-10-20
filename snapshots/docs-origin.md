@@ -13,7 +13,7 @@ In early beta you can:
 - [Create Origin repositories](https://cursor.com/docs/origin/create-repository.md), including from Cursor agents
 - [Clone, push, and pull](https://cursor.com/docs/origin/git.md) with standard git
 - [Mirror a GitHub repository](https://cursor.com/docs/origin/mirror-github.md) into Origin
-- [Open, review, and merge pull requests](https://cursor.com/docs/origin/pull-requests.md)
+- [Open, review, and merge pull requests](https://cursor.com/docs/origin/pull-requests.md), with [Code Tours](https://cursor.com/docs/origin/code-tours.md) to walk reviewers through each one
 - [Browse and search](https://cursor.com/docs/origin/browse.md) code at [cursor.com/codebase](https://cursor.com/codebase)
 - Manage [repository settings](https://cursor.com/docs/origin/settings.md#repository-settings) and [codebase settings](https://cursor.com/docs/origin/settings.md#codebase-settings)
 - Install [Origin Apps](https://cursor.com/docs/origin/apps.md) from codebase settings

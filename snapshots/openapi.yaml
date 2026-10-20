@@ -17704,8 +17704,7 @@ components:
                     type: string
                     description: |-
                         Lifecycle state. `succeeded`, `failed_rolled_back`, and `superseded` are
-                         terminal; `requires_attention` needs operator intervention or a forced
-                         cutover.
+                         terminal; `requires_attention` needs operator intervention.
                 phase:
                     readOnly: true
                     type: string
@@ -17762,8 +17761,7 @@ components:
                     format: date-time
             description: |-
                 An asynchronous job tracking one mirror transition. Jobs are created by
-                 starting a transition or forcing a cutover, and are polled until they reach
-                 a terminal status.
+                 starting a transition, and are polled until they reach a terminal status.
         NamespaceGrant:
             type: object
             properties:
