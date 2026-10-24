@@ -353,6 +353,7 @@ Request only the minimum scopes your app needs. `repository:metadata:read` and a
 | `namespace:settings:read`                | Read the grants held directly on an owner. Read the SSH certificate authorities an owner trusts and whether it requires certificates. Read a namespace's inbound IP allowlist and its entries.                                                                                                                                                |
 | `namespace:settings:write`               | Upsert and delete grants on an owner. Add and remove SSH certificate authorities and set whether the owner requires certificates. Add, update, remove, and replace inbound IP allowlist entries and set whether the namespace enforces its allowlist. The certificate authority and allowlist writes are carried by a Cursor user credential. |
 | `namespace:user_tokens:write`            | Mint installation user tokens that act as a member of the installation's namespace. A token can't carry this scope. See [Acting on behalf of users](https://cursor.com/docs/api/origin/acting-as-users.md).                                                                                                                                   |
+| `namespace:repositories:create`          | Create repositories in the installation's namespace with [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo). Only an installation with the `all` repository-selection mode can use it.                                                                                                                               |
 
 Requesting a `:write` scope also grants the matching `:read` scope, so `repository:labels:write` covers `repository:labels:read` and you do not have to list both. The reverse does not hold: a read scope never grants writes.
 
@@ -499,10 +500,11 @@ Resource snapshots contain the resource's current fields. Container context uses
 - `PullRequestReference` identifies a pull request and nests its repository reference.
 - `ThreadReference` identifies the thread containing a pull request comment.
 - `OriginActor` identifies a public actor as one of `user`, `app`, or `serviceAccount`. Exactly one variant is present; read the identity from that variant. A `user` can carry `performedVia`, naming the app (`performedVia.app`) or the service account (`performedVia.serviceAccount`), such as the user's personal Grok bot, that acted on the user's behalf; the user is still the actor. See [Acting on behalf of users](https://cursor.com/docs/api/origin/acting-as-users.md). A `serviceAccount`, including one in `performedVia`, carries its `id` and, when Cursor can describe the account, a `type` naming the product it acts for and a `displayName`.
+- A requested reviewer in the [pull request reviewer events](https://cursor.com/docs/api/origin/llms-full.txt#pull-request-reviewer-events), and in `reviewers` on [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers) and [Request Pull Request Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#request-pull-request-reviewers), is one of `user`, `group`, or `serviceAccount`. Origin might add reviewer kinds, so ignore unknown fields when you decode a reviewer, and treat a reviewer with no variant you recognize as unknown rather than as an error.
 
 A `user` actor's `email` is member information. In pull request, review, comment, check run, requested reviewer, and merge eligibility responses, it's an empty string unless the caller holds `repository:members:read` on the repository. Every other response and webhook payload that carries a `user` includes it.
 
-An actor field is absent when the user or service account it names has been deleted, and requested-reviewer lists leave out a deleted reviewer. A deleted service account named in `performedVia` still appears with its `id` alone, and so does an app that no longer exists.
+An actor field is absent when the user or service account it names has been deleted, and requested-reviewer lists leave out a deleted user or group. A deleted service account named in `performedVia` still appears with its `id` alone, and so do an app that no longer exists and, in `reviewers`, a requested service account whose details can no longer be read.
 
 ## Check runs
 
@@ -550,7 +552,7 @@ Only a running run, `in_progress` or `failing`, expires. Once its `deadlineAt` h
 
 ## Current limitations
 
-- Namespace-wide repository listing and repository creation are not part of the partner API. Discover repositories through the installation.
+- Namespace-wide repository listing is not part of the partner API. Discover repositories through the installation.
 - Commit comparison returns summary data rather than an embedded commit list. Changed files have their own paginated endpoint, [List Comparison Files](https://cursor.com/docs/api/origin/llms-full.txt#list-comparison-files).
 - Threads are addressable only for resolution. There is no endpoint that lists threads directly; read them from the comments they contain.
 - Push webhooks do not include a complete commit list.
@@ -2272,7 +2274,7 @@ curl --request POST \
 
 `cloneUrl` is an output-only HTTPS clone URL. [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) includes `cloneUrl`.
 
-Partners discover their repositories through [List App Installation Repositories](https://cursor.com/docs/api/origin/llms-full.txt#list-app-installation-repositories). Namespace-wide repository listing and creation are not part of the partner API.
+Partners discover their repositories through [List App Installation Repositories](https://cursor.com/docs/api/origin/llms-full.txt#list-app-installation-repositories). Namespace-wide repository listing is not part of the partner API. An installation with the `all` repository-selection mode can create repositories with [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo) once it holds `namespace:repositories:create`.
 
 ### List Namespaces
 
@@ -2284,7 +2286,7 @@ Requires no scope (user access token).
 
 Lists the namespaces you can list repositories in, ordered by slug.
 
-The candidates are the namespaces of your teams, your personal namespace, and the namespaces holding repositories you were granted. Only those on which you hold `namespace:repositories:read` are returned, so every result is a valid `ownerSlug` for [List Repos](https://cursor.com/docs/api/origin/llms-full.txt#list-repos).
+The candidates are the namespaces of your teams, your personal namespace, the namespaces holding repositories you were granted, and the namespaces where a [grant](https://cursor.com/docs/api/origin/llms-full.txt#grants) on the namespace or one of its repositories names you or a group you belong to. Only those on which you hold `namespace:repositories:read` are returned, so every result is a valid `ownerSlug` for [List Repos](https://cursor.com/docs/api/origin/llms-full.txt#list-repos).
 
 The caller must be a Cursor user credential; the call needs no scope of its own. App tokens, installation tokens, and service accounts receive `PermissionDenied` (HTTP 403).
 
@@ -2649,6 +2651,44 @@ curl --request GET \
 }
 ```
 
+### Delete Repo
+
+DELETE
+
+`/v1/origin/repos/{ownerSlug}/{repoName}`
+
+Requires scope `namespace:repositories:delete` (user access token).
+
+Soft-deletes a repository. The response body is empty.
+
+The repository stops appearing in lookups and lists, and its Git data isn't removed. For a repository that syncs with an upstream source, only Origin's copy is deleted; the upstream repository is untouched. A repository that doesn't exist, that you can't see, or that was already deleted returns `404`.
+
+#### Path Parameters
+
+`ownerSlug` string Required
+
+Owning entity's unique slug.
+
+`repoName` string Required
+
+Repo name, unique to the owner entity.
+
+#### Response Fields
+
+Successful requests return no response body.
+
+```bash
+curl --request DELETE \
+  --url 'https://api.cursor.com/v1/origin/repos/OWNER_SLUG/REPO_NAME' \
+  --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN'
+```
+
+**Response:**
+
+```text
+204 No Content
+```
+
 ### Update Repo
 
 PATCH
@@ -2826,9 +2866,11 @@ POST
 
 `/v1/origin/repos/{ownerSlug}`
 
-Requires scope `namespace:repositories:create` (user access token).
+Requires scope `namespace:repositories:create` (installation access token or user access token).
 
 Creates a repo belonging to an owner.
+
+When an app calls it, the installation must hold `namespace:repositories:create` and use the `all` repository-selection mode, which covers every repository in the namespace, including the new one. An installation on selected repositories can't create repositories even when a workspace admin approved the scope, and an existing installation holds the scope only after a workspace admin approves it through the [installation URL](https://cursor.com/docs/api/origin/llms-full.txt#installation).
 
 The owner must be eligible to write to Origin when the request is made. A user owner must be on a Pro, Pro Student, Pro+, Ultra, or Start plan. A team owner must have an active paid team plan, must not be on Privacy Mode (Legacy), and must not have Origin turned off by a team admin. An ineligible owner returns `FailedPrecondition` (HTTP 400). Reading existing repositories does not carry this requirement.
 
@@ -3123,6 +3165,8 @@ Requires scope `repository:contents:read` (installation access token or user acc
 Downloads a gzip-compressed tar of the repository tree at `ref`.
 
 Origin keys the archive on the repository and the commit `ref` resolves to. The first request for a given commit responds `200` with `Content-Type: application/gzip` and streams the archive as the response body. Later requests for the same commit respond `302` with an empty body and a signed download URL in `Location`, valid for 15 minutes; follow the redirect to fetch the bytes. The archive contains a single top-level directory named `{ownerSlug}-{repoName}-{shortSha}/`, where `shortSha` is the first 7 hex characters of the resolved commit, matching the layout of GitHub's tarball endpoint. An empty repository returns `ABORTED` (HTTP 409 Conflict), and a ref that does not resolve returns `404`.
+
+With an installation access token, an installation user token, or a service account, Origin first checks the caller's address against an [inbound IP allowlist](https://cursor.com/docs/api/origin/llms-full.txt#inbound-ip-allowlist): for an installation access token or an installation user token, the list of the namespace the app is installed in; for a service account, the list of the team that owns the account. While that list is enforced, a request from an address it doesn't include returns `PermissionDenied` (HTTP 403). Every other request with those credentials responds `302`, including the first request for a commit: Origin builds the archive before it responds. The download URL it returns to those credentials accepts requests only from addresses on the inbound IP allowlist of the repository's namespace while the namespace enforces one, and for a service account also from addresses on the allowlist of the team that owns the account.
 
 Send the ref as a query parameter instead of a path segment to address a ref containing "/": `GET /v1/origin/repos/{ownerSlug}/{repoName}/tarball?ref=refs/heads/main`. Omit it to archive the repository's default branch.
 
@@ -6182,23 +6226,27 @@ Max commits to return. Defaults to 30 when unset or 0. Values above 100 are clam
 
 `pageToken` string
 
-Opaque cursor from a previous response's `nextPageToken`. Empty for the first page. Encodes the starting ref, walk position, and email and time filters; `sha`, `pageSize`, `authorEmails`, `committerEmails`, `since`, and `until` are ignored when a token is supplied. A filtered page can contain fewer than `pageSize` commits, or none, while `nextPageToken` is set. Keep paging until it is empty.
+Opaque cursor from a previous response's `nextPageToken`. Empty for the first page. Encodes the starting ref, walk position, and email, time, and path filters; `sha`, `pageSize`, `authorEmails`, `committerEmails`, `since`, `until`, and `path` are ignored when a token is supplied. A filtered page can contain fewer than `pageSize` commits while `nextPageToken` is set, and comes back empty with a token only after 100,000 scanned commits held no match. Keep paging until `nextPageToken` is empty.
 
 `authorEmails` array
 
-Optional Git author email filter. Matches any listed email, case-insensitively after trimming whitespace. Blank entries and duplicates are ignored. At most 100 distinct emails; empty means no filter. These are Git author emails, not Origin actor IDs. Each page scans at most 1,000 commits for matches.
+Optional Git author email filter. Matches any listed email, case-insensitively after trimming whitespace. Blank entries and duplicates are ignored. At most 100 distinct emails; empty means no filter. These are Git author emails, not Origin actor IDs.
 
 `committerEmails` array
 
-Optional Git committer email filter. Uses the same normalization and 100-email limit as `authorEmails`; empty means no filter. When both filters are set, a commit must match both lists. Each page scans at most 1,000 commits for matches.
+Optional Git committer email filter. Uses the same normalization and 100-email limit as `authorEmails`; empty means no filter. When both filters are set, a commit must match both lists.
 
 `since` string
 
-Optional inclusive lower bound on committer time, as an RFC 3339 timestamp (for example `2026-08-01T00:00:00Z`): only commits committed at or after it are listed. Git records committer time in whole seconds, so fractional seconds are ignored, and a rebase or cherry-pick rewrites committer time but not author time. The listing ends once it reads 100 consecutive commits older than `since`, as `git log --since` does. The time filters share each page's 1,000-commit scan with the email filters. A malformed timestamp returns `InvalidArgument` (HTTP 400).
+Optional inclusive lower bound on committer time, as an RFC 3339 timestamp (for example `2026-08-01T00:00:00Z`): only commits committed at or after it are listed. Git records committer time in whole seconds, so fractional seconds are ignored, and a rebase or cherry-pick rewrites committer time but not author time. The listing ends once it reads 100 consecutive commits older than `since`, as `git log --since` does. A malformed timestamp returns `InvalidArgument` (HTTP 400).
 
 `until` string
 
 Optional inclusive upper bound on committer time, as an RFC 3339 timestamp: only commits committed at or before it are listed. A malformed timestamp, or a `since` later than `until`, returns `InvalidArgument` (HTTP 400).
+
+`path` string
+
+Optional repository path filter: only commits that change this path are listed, and renames aren't followed. A commit changes the path when the path's tree entry differs from at least one parent, so a merge is listed when the path differs from any of its parents, as `git log --full-history -- <path>` does. A directory path matches when any descendant changes. Surrounding whitespace and empty and `.` segments are ignored, so leading, trailing, and repeated slashes don't matter; a path with a `..` segment returns `InvalidArgument` (HTTP 400). Empty means no filter. Combined with the email and time filters, a commit must match every filter that is set.
 
 #### Response Fields
 
@@ -8851,7 +8899,7 @@ curl --request DELETE \
 
 ## Inbound IP allowlist
 
-A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. These endpoints read the list, turn enforcement on or off, add, update, and remove entries, and replace the whole entry set. Allowlists are available on team namespaces.
+A namespace's inbound IP allowlist holds the addresses allowed to reach its repositories. While the namespace enforces the list and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses. The list does not restrict requests made with an app JWT, an installation access token, an installation user token, or a service account. The exception is a repository archive. [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) refuses an installation access token or an installation user token calling from an address outside the list of the namespace the app is installed in, and a service account calling from outside the list of the team that owns it; the download URL it returns to those credentials accepts requests only from listed addresses. These endpoints read the list, turn enforcement on or off, add, update, and remove entries, and replace the whole entry set. Allowlists are available on team namespaces.
 
 Each entry is an IPv4 or IPv6 address or CIDR range with its own opaque `id`. The entry endpoints address an entry by that ID as `entryId`, and the ID stays the same when [Update Inbound IP Allowlist Entry](https://cursor.com/docs/api/origin/llms-full.txt#update-inbound-ip-allowlist-entry) changes the entry's `cidr`. A namespace lists at most 1,000 entries, and a disabled entry stays listed but admits nothing.
 
@@ -8945,7 +8993,7 @@ PATCH
 
 Requires scope `namespace:settings:write` (user access token).
 
-Turns enforcement of the namespace's inbound IP allowlist on or off and returns the allowlist. While the list is enforced and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses; app JWTs, installation access tokens, installation user tokens, and service accounts are not restricted. Enabling a list that excludes the caller's own address returns `InvalidArgument` (HTTP 400), and a caller the enforced list already excludes receives `PermissionDenied` (HTTP 403). Setting the current value succeeds without change.
+Turns enforcement of the namespace's inbound IP allowlist on or off and returns the allowlist. While the list is enforced and at least one entry is enabled, git over SSH and HTTPS, the API, and file downloads on the namespace's repositories accept a Cursor user's requests only from listed addresses; app JWTs, installation access tokens, installation user tokens, and service accounts are not restricted, except by [Get Repo Tarball](https://cursor.com/docs/api/origin/llms-full.txt#get-repo-tarball) and the archive downloads it returns to them. Enabling a list that excludes the caller's own address returns `InvalidArgument` (HTTP 400), and a caller the enforced list already excludes receives `PermissionDenied` (HTTP 403). Setting the current value succeeds without change.
 
 The caller must be a Cursor user credential holding `namespace:settings:write`. App and installation tokens are not accepted.
 
@@ -9761,7 +9809,7 @@ Closed or merged pull requests may additionally include `closedAt`, `mergedAt`, 
 
 `mergeCommitSha` is the commit the merge wrote to the base branch: set once merged, unset before. The pre-merge preview is the `pull/{pullNumber}/merge` ref, a different commit; see [Git data](https://cursor.com/docs/api/origin/llms-full.txt#git-data).
 
-`version.potentialMergeCommit` reports Origin's test merge of that version: whether it is `prepared`, hit a `merge_conflict`, or is still `unknown`; the base branch tip `baseSha` the merge was attempted on; and, once prepared, the merge commit's `sha`. It describes that version only, so a merged pull request keeps reporting it. `pull_request.*` webhook payloads carry it as of the event. An event waits for the preparation only within a time budget, so it can say `unknown` where a later [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) says `prepared`; re-read the pull request or wait for the next event.
+`version.potentialMergeCommit` reports Origin's test merge of that version: whether it is `prepared`, hit a `merge_conflict`, or is still `unknown`; the base branch tip `baseSha` the merge was attempted on; and, once prepared, the merge commit's `sha`. It describes that version only, so a merged pull request keeps reporting it. `pull_request.*` webhook payloads carry it as of the event. An event waits for the preparation only within a time budget, so it can say `unknown` where a later [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request) says `prepared` or `merge_conflict`, and no event follows when the state changes. Re-read the pull request, or call [Prepare Pull Request Merge Ref](https://cursor.com/docs/api/origin/llms-full.txt#prepare-pull-request-merge-ref) to get a test merge on demand.
 
 `autoMerge` is present while auto-merge is on, in [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview): Origin merges the pull request on the enabler's behalf once it's mergeable. [Enable Pull Request Auto Merge](https://cursor.com/docs/api/origin/llms-full.txt#enable-pull-request-auto-merge) turns it on and [Disable Pull Request Auto Merge](https://cursor.com/docs/api/origin/llms-full.txt#disable-pull-request-auto-merge) turns it off. `pull_request.*` webhook payloads leave it out, as they leave out assigned labels; read it with [Get Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request).
 
@@ -9777,7 +9825,7 @@ GET
 
 Requires scope `repository:pull_requests:read` (installation access token or user access token).
 
-Lists pull requests in a repo, optionally filtered by head branch, head commit, base branch, author, creation-time range, stack, labels, and state. Each pull request includes its assigned labels and, when it belongs to a stack, its `stack` membership.
+Lists pull requests in a repo, optionally filtered by head branch, head commit, merge commit, base branch, author, creation-time range, merge-time range, stack, labels, and state. Each pull request includes its assigned labels and, when it belongs to a stack, its `stack` membership.
 
 Results are sorted by creation order or by last update, selected with `sortBy`, most recent first. Set `direction=asc` for the other order. Page tokens embed the sort and the filters they were minted under, so a token replayed under a different sort or filter set is rejected; restart pagination when either changes.
 
@@ -9823,11 +9871,11 @@ Sort direction along `sortBy`. `"desc"` is the default: with `sortBy=created` it
 
 `since` string
 
-Optional inclusive lower bound on creation time, as an RFC 3339 timestamp such as `2026-08-01T00:00:00Z`. Returns only pull requests created at or after that instant. A malformed timestamp returns `InvalidArgument` (HTTP 400).
+Optional inclusive lower bound on creation time, as an RFC 3339 timestamp such as `2026-08-01T00:00:00Z`. Returns only pull requests created at or after that instant. To filter on merge time, use `mergedSince`. A malformed timestamp returns `InvalidArgument` (HTTP 400).
 
 `until` string
 
-Optional inclusive upper bound on creation time, in the same RFC 3339 format as `since`. Returns only pull requests created at or before that instant. A malformed timestamp returns `InvalidArgument` (HTTP 400).
+Optional inclusive upper bound on creation time, in the same RFC 3339 format as `since`. Returns only pull requests created at or before that instant. To filter on merge time, use `mergedUntil`. A malformed timestamp returns `InvalidArgument` (HTTP 400).
 
 `sortBy` string
 
@@ -9844,6 +9892,18 @@ Optional stack filter: a stack id as returned in `pullRequests[].stack.id`. Retu
 `labels` array
 
 Optional label filter, in [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview). Repeat the parameter once per label name, as in `labels=bug&labels=security`. A comma is part of the name, so `labels=bug,security` names a single label. Returns only pull requests that carry every named label. Origin trims whitespace around each name and counts a repeated name once. Omit the parameter, or pass only blank values, for no filter. More than 10 names, a name longer than 50 characters, or a name that isn't a label in this repository returns an empty list. The other filters still apply, and `state` still defaults to `open`.
+
+`mergeCommitShas` array
+
+Optional merge-commit filter. Repeat the parameter once per SHA, as in `mergeCommitShas=FIRST_SHA&mergeCommitShas=SECOND_SHA`. Each value is a full 40- or 64-character hex commit SHA, matched case-insensitively, as returned in `pullRequests[].mergeCommitSha`. Returns pull requests whose merge commit equals any listed SHA. Origin trims whitespace around each SHA and counts a repeated SHA once. Omit the parameter, or pass only blank values, for no filter. More than 100 distinct SHAs, or any value that isn't a full commit SHA, returns an empty list, and an unknown SHA matches nothing. The other filters still apply, and `state` defaults to `open`, so pass `state=merged` or `state=all`: a pull request records its merge commit only once it merges.
+
+`mergedSince` string
+
+Optional inclusive lower bound on merge time, as an RFC 3339 timestamp such as `2026-08-01T00:00:00Z`. Returns only pull requests whose `mergedAt` is at or after that instant. Unmerged pull requests have no `mergedAt` and never match, and `state` defaults to `open`, so pass `state=merged` or `state=all`. Combined with `since` and `until`, which bound creation time, a pull request must match every bound that is set. A malformed timestamp returns `InvalidArgument` (HTTP 400).
+
+`mergedUntil` string
+
+Optional inclusive upper bound on merge time, in the same RFC 3339 format as `mergedSince`. Returns only pull requests whose `mergedAt` is at or before that instant. Unmerged pull requests never match. A malformed timestamp returns `InvalidArgument` (HTTP 400).
 
 #### Response Fields
 
@@ -13030,7 +13090,7 @@ Repo name, unique to the owner entity.
 
 `emoji` string Required
 
-The emoji to place, such as `✅`, stored exactly as sent. At most 32 Unicode code points, with no control characters or unpaired surrogates; `.` and `..` are rejected. A missing or invalid value returns `InvalidArgument` (HTTP 400).
+The emoji to place, such as `✅`, stored exactly as sent. At most 32 Unicode code points, with no control characters or unpaired surrogates; `.` and `..` are rejected, and so is any value containing `@`. A missing or invalid value returns `InvalidArgument` (HTTP 400).
 
 #### Response Fields
 
@@ -13080,7 +13140,7 @@ Repo name, unique to the owner entity.
 
 `emoji` string Required
 
-The emoji to remove, exactly as it appears in the comment's `reactions`, percent-encoded in the path: `✅` is `%E2%9C%85`.
+The emoji to remove, exactly as it appears in the comment's `reactions`, percent-encoded in the path: `✅` is `%E2%9C%85`. A value containing `@` is rejected.
 
 #### Response Fields
 
@@ -13780,6 +13840,10 @@ Merge Pull Request returns `FailedPrecondition` (HTTP 400), and nothing merges, 
 
 In a repository whose `allowMergeCommit` is `true`, Merge Pull Request also returns `FailedPrecondition` (HTTP 400), and nothing merges, when the pull request's `version.baseSha` has diverged from its base branch. The refusal applies to every `mergeMethod`. A pull request is left in that state when its parent is squash-merged and it's retargeted onto the branch the parent landed on: it keeps the parent's head as its `version.baseSha`, which the squash commit doesn't bring into that branch's history, so a merge against Git's merge base might bring back changes the pull request removed. For a stacked pull request, Origin checks the stack's lowest unmerged pull request. Rebase the pull request's own commits onto its base branch and push them, then merge. [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability) reports the same condition as a `needs_restack` blocker.
 
+Merge Pull Request also returns `FailedPrecondition` (HTTP 400), and nothing merges, when the pull request's base branch is the head branch of a pull request that has already merged, because commits merged onto that branch wouldn't reach the branch the earlier pull request landed on. For a stacked pull request, Origin checks the base of the stack's lowest unmerged pull request, where the merge lands. The repository's default branch never triggers this refusal, and neither does a base branch that an `active` `push_branch` ruleset with a `deletion` rule names in `includedRefNames`; a pattern that matches every branch, such as `~ALL`, doesn't count. The error message names the branch the pull request should target instead. Set its `base` to that branch with [Update Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#update-pull-request), then merge. [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability) reports the same condition as a `needs_restack` blocker.
+
+Merge Pull Request also returns `FailedPrecondition` (HTTP 400), and nothing merges, when a merge commit is the only method that can land on the pull request's base branch and an `active` `required_linear_history` rule covers that branch, because the rule rejects merge commits. A squash can't land there when the repository's `allowSquashMerge` is `false` or an `active` `pull_request` rule on the branch leaves `squash` out of its `allowedMergeMethods`. For a stacked pull request, Origin checks the branch the stack lands on. The refusal doesn't apply when the caller can bypass every ruleset whose `required_linear_history` rule covers the branch. The error message names the branch and the rulesets responsible. Allow squash merges on the branch or remove the `required_linear_history` rule, then merge. [Get Pull Request Mergeability](https://cursor.com/docs/api/origin/llms-full.txt#get-pull-request-mergeability) reports the same condition as a `ruleset_error` blocker.
+
 #### Path Parameters
 
 `ownerSlug` string Required
@@ -14443,7 +14507,7 @@ curl --request GET \
         }
       },
       "kind": "required_approvals",
-      "message": "Approving review count is 0; 1 required. Request reviews and wait for the required approvals.",
+      "message": "0 of 1 required approvals. Request reviews and wait for the required approvals.",
       "requiredApprovals": {
         "requiredCount": 1,
         "approvedCount": 0
@@ -14516,9 +14580,9 @@ GET
 
 Requires scope `repository:pull_requests:reviews:read` (installation access token or user access token).
 
-Lists the users and groups whose review is currently requested on a pull request.
+Lists the users, groups, and service accounts whose review is currently requested on a pull request.
 
-A direct request clears when that user submits a review, and a group request clears when any current member of the group submits. Unsubmitted draft reviews leave the request pending, and requesting review again after a submission returns the reviewer to this list. Groups without a readable public identifier are omitted.
+A direct request clears when that user or service account submits a review, and a group request clears when any current member of the group submits. Unsubmitted draft reviews leave the request pending, and requesting review again after a submission returns the reviewer to this list. Groups without a readable public identifier are omitted. Service accounts appear only in `reviewers`; the deprecated `users` and `groups` lists carry the same users and groups as before.
 
 #### Path Parameters
 
@@ -14538,7 +14602,7 @@ Repository-local pull request number.
 
 `users` array
 
-Users whose review is requested. Empty when none are pending. Deleted accounts are left out.
+Deprecated: read `reviewers` instead. Still populated with the users whose review is requested; empty when none are pending, and deleted accounts are left out.
 
 `users[].id` string
 
@@ -14558,11 +14622,27 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `groups` array
 
-Groups whose review is requested. Empty when none are pending.
+Deprecated: read `reviewers` instead. Still populated with the groups whose review is requested; empty when none are pending.
 
 `groups[].id` string
 
 Group public identifier (`grp_…`).
+
+`reviewers` array
+
+Every reviewer whose review is currently requested, in the shape `reviewer` has in the [Pull Request Reviewer Events](https://cursor.com/docs/api/origin/llms-full.txt#pull-request-reviewer-events) payload. Each entry sets exactly one of `user`, `group`, or `serviceAccount`; Origin might add reviewer kinds, so treat an entry with no field you recognize as an unknown reviewer. Empty when none are pending. Deleted user accounts are left out, and a service account whose details can no longer be read is listed by `id` alone.
+
+`reviewers[].user` object
+
+A requested user, with the same `id`, `email`, `displayName`, and `handle` fields as `users[]`.
+
+`reviewers[].group` object
+
+A requested group, named by its public identifier in `id` (`grp_…`).
+
+`reviewers[].serviceAccount` object
+
+A requested service account, such as a Grok bot: its `id` (`sa_…`) and, when Cursor can describe the account, a `type` naming the product it acts for and a `displayName`.
 
 ```bash
 curl --request GET \
@@ -14584,6 +14664,19 @@ curl --request GET \
     {
       "id": "grp_01k2ja2000e0080000000000n2"
     }
+  ],
+  "reviewers": [
+    {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
+      }
+    },
+    {
+      "group": {
+        "id": "grp_01k2ja2000e0080000000000n2"
+      }
+    }
   ]
 }
 ```
@@ -14596,9 +14689,11 @@ POST
 
 Requires scope `repository:pull_requests:reviews:write` (installation access token or user access token).
 
-Requests reviews from the given users and groups on a pull request, and returns the reviewers this call requested.
+Requests reviews from the given users, groups, and service accounts on a pull request, and returns the reviewers this call requested.
 
-Identifiers resolve against the repository's reviewer candidates by public id, user email, or group slug. Display names do not resolve. An unknown or ambiguous identifier returns `InvalidArgument` (HTTP 400) naming the identifier, and at least one non-empty entry is required across `users` and `groups`.
+Name each reviewer in `reviewers` by public id: a `user` (`user_…`), a `group` (`grp_…`), or a `serviceAccount` (`sa_…`). The deprecated `users` and `groups` lists still work and are the only way to name a user by email or a group by slug; Origin combines entries from all three lists. Users and groups resolve against the repository's reviewer candidates. With an [installation access token](https://cursor.com/docs/api/origin/llms-full.txt#installation-access-token), the candidates on a repository whose namespace a team owns are that team's members and the members and groups of the organizations linked to it. Display names do not resolve. An unknown or ambiguous user or group returns `InvalidArgument` (HTTP 400) naming the identifier. An entry with no reviewer kind set or an id with the wrong prefix for its kind also returns `InvalidArgument`, and at least one reviewer is required across the three lists.
+
+A service account must be a bot whose owner belongs to the team that owns the repository, under the same rules as every other way of requesting a review. A service account the repository can't request returns `PermissionDenied` (HTTP 403), and one that can't review this pull request, such as a personal bot on a pull request its owner authored, returns `FailedPrecondition` (HTTP 400).
 
 Requesting an already-requested reviewer bumps the request timestamp, so a reviewer who had submitted a review reappears as pending. A reviewer who is not a candidate for the repository returns `PermissionDenied` (HTTP 403).
 
@@ -14620,17 +14715,33 @@ Repository-local pull request number.
 
 `users` array
 
-User identifiers to request. Each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
+Deprecated: use `reviewers` instead. Still accepted, and the only way to request a user by email. User identifiers to request; each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
 
 `groups` array
 
-Group identifiers to request. Each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+Deprecated: use `reviewers` instead. Still accepted, and the only way to request a group by slug. Group identifiers to request; each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+
+`reviewers` array
+
+Reviewers to request, each naming one user, group, or service account by public id. Set exactly one of `user`, `group`, or `serviceAccount` on each entry. Combined with `users` and `groups`.
+
+`reviewers[].user.id` string
+
+Public user id (`user_…`).
+
+`reviewers[].group.id` string
+
+Public group id (`grp_…`).
+
+`reviewers[].serviceAccount.id` string
+
+Service account id (`sa_…`).
 
 #### Response Fields
 
 `users` array
 
-Users this call requested.
+Deprecated: read `reviewers` instead. Still populated with the users this call requested.
 
 `users[].id` string
 
@@ -14650,11 +14761,15 @@ The user's claimed profile handle, without the `@` prefix. Present only while th
 
 `groups` array
 
-Groups this call requested.
+Deprecated: read `reviewers` instead. Still populated with the groups this call requested.
 
 `groups[].id` string
 
 Group public identifier (`grp_…`).
+
+`reviewers` array
+
+Every reviewer this call requested, service accounts included. Each entry has the same fields as `reviewers[]` on [List Pull Request Requested Reviewers](https://cursor.com/docs/api/origin/llms-full.txt#list-pull-request-requested-reviewers).
 
 ```bash
 curl --request POST \
@@ -14662,11 +14777,22 @@ curl --request POST \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "users": [
-    "user_01k2ja2000e0080000000000c3"
-  ],
-  "groups": [
-    "grp_01k2ja2000e0080000000000n2"
+  "reviewers": [
+    {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3"
+      }
+    },
+    {
+      "group": {
+        "id": "grp_01k2ja2000e0080000000000n2"
+      }
+    },
+    {
+      "serviceAccount": {
+        "id": "sa_1613fd6d-daa9-481c-9b22-5a231d4f231e"
+      }
+    }
   ]
 }'
 ```
@@ -14685,6 +14811,19 @@ curl --request POST \
     {
       "id": "grp_01k2ja2000e0080000000000n2"
     }
+  ],
+  "reviewers": [
+    {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
+      }
+    },
+    {
+      "group": {
+        "id": "grp_01k2ja2000e0080000000000n2"
+      }
+    }
   ]
 }
 ```
@@ -14697,11 +14836,11 @@ DELETE
 
 Requires scope `repository:pull_requests:reviews:write` (installation access token or user access token).
 
-Removes requested reviews from the given users and groups on a pull request. The response body is empty.
+Removes requested reviews from the given users, groups, and service accounts on a pull request. The response body is empty.
 
-Identifiers resolve against the repository's reviewer candidates by public id, user email, or group slug. Display names do not resolve. An unknown or ambiguous identifier returns `InvalidArgument` (HTTP 400) naming the identifier, and at least one non-empty entry is required across `users` and `groups`.
+Name each reviewer in `reviewers` by public id: a `user` (`user_…`), a `group` (`grp_…`), or a `serviceAccount` (`sa_…`). The deprecated `users` and `groups` lists still work and are the only way to name a user by email or a group by slug; Origin combines entries from all three lists. Users and groups resolve against the repository's reviewer candidates. With an [installation access token](https://cursor.com/docs/api/origin/llms-full.txt#installation-access-token), the candidates on a repository whose namespace a team owns are that team's members and the members and groups of the organizations linked to it. Display names do not resolve. An unknown or ambiguous user or group returns `InvalidArgument` (HTTP 400) naming the identifier. An entry with no reviewer kind set, an id with the wrong prefix for its kind, or a malformed service account id also returns `InvalidArgument`, and at least one reviewer is required across the three lists.
 
-Removing a user or group that is not currently requested is a no-op. An identifier that is no longer a reviewer candidate is still accepted when it is a stable public id (`user_…` or `grp_…`), so a reviewer who left the repository can be cleared.
+Removing a reviewer that is not currently requested, including a service account that doesn't exist, is a no-op. An identifier that is no longer a reviewer candidate is still accepted when it is a stable public id (`user_…` or `grp_…`), so a reviewer who left the repository can be cleared.
 
 #### Path Parameters
 
@@ -14721,11 +14860,27 @@ Repository-local pull request number.
 
 `users` array
 
-User identifiers to remove. Each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
+Deprecated: use `reviewers` instead. Still accepted, and the only way to remove a user by email. User identifiers to remove; each entry must uniquely match a user candidate for the repository by public `user_…` id or email.
 
 `groups` array
 
-Group identifiers to remove. Each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+Deprecated: use `reviewers` instead. Still accepted, and the only way to remove a group by slug. Group identifiers to remove; each entry must uniquely match a group candidate for the repository by public `grp_…` id, qualified group slug, or group slug.
+
+`reviewers` array
+
+Reviewers to remove, each naming one user, group, or service account by public id. Set exactly one of `user`, `group`, or `serviceAccount` on each entry. Combined with `users` and `groups`.
+
+`reviewers[].user.id` string
+
+Public user id (`user_…`).
+
+`reviewers[].group.id` string
+
+Public group id (`grp_…`).
+
+`reviewers[].serviceAccount.id` string
+
+Service account id (`sa_…`).
 
 #### Response Fields
 
@@ -14737,11 +14892,22 @@ curl --request DELETE \
   --header 'Authorization: Bearer YOUR_ORIGIN_TOKEN' \
   --header 'Content-Type: application/json' \
   --data '{
-  "users": [
-    "user_01k2ja2000e0080000000000c3"
-  ],
-  "groups": [
-    "grp_01k2ja2000e0080000000000n2"
+  "reviewers": [
+    {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3"
+      }
+    },
+    {
+      "group": {
+        "id": "grp_01k2ja2000e0080000000000n2"
+      }
+    },
+    {
+      "serviceAccount": {
+        "id": "sa_1613fd6d-daa9-481c-9b22-5a231d4f231e"
+      }
+    }
   ]
 }'
 ```
@@ -15929,7 +16095,7 @@ Stable Origin ID for this rule.
 
 `rulesets[].rules[].ruleType` string
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`.
 
 `rulesets[].rules[].parameters` object
 
@@ -15949,23 +16115,19 @@ When the bypass applies. Allowed values: `always`, `pull_request_only`.
 
 `rulesets[].bypassActors[].user` object
 
-A user principal. Exactly one of `user`, `team`, `app`, or `originRole` is present.
+A user principal. Exactly one of `user`, `group`, or `app` is present.
 
 `rulesets[].bypassActors[].user.id` string
 
 The user's public ID (`user_…`).
 
-`rulesets[].bypassActors[].team` object
+`rulesets[].bypassActors[].group` object
 
-A team principal.
+A group principal: a Cursor organization group whose members can bypass the ruleset.
 
-`rulesets[].bypassActors[].team.organizationPublicId` string
+`rulesets[].bypassActors[].group.id` string
 
-Immutable organization public ID.
-
-`rulesets[].bypassActors[].team.groupPublicId` string
-
-Immutable group public ID.
+The group's immutable public ID (`grp_…`), not its slug.
 
 `rulesets[].bypassActors[].app` object
 
@@ -15974,14 +16136,6 @@ An app principal.
 `rulesets[].bypassActors[].app.id` string
 
 App ID, prefixed `app_`.
-
-`rulesets[].bypassActors[].originRole` object
-
-A principal holding an Origin role.
-
-`rulesets[].bypassActors[].originRole.role` string
-
-Allowed values: `namespace_admin`, `repository_admin`, `repository_write`.
 
 `repository` object
 
@@ -16089,7 +16243,7 @@ Repo name, unique to the owner entity.
 
 `name` string Required
 
-Ruleset name.
+Ruleset name. Leading and trailing whitespace is trimmed. Maximum length: 120 characters, counted in UTF-16 code units, so an astral character such as an emoji counts twice. A longer name returns `InvalidArgument` (HTTP 400).
 
 `description` string
 
@@ -16113,11 +16267,11 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
 
 `rules[].ruleType` string Required
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
 
 `rules[].parameters` object
 
@@ -16145,7 +16299,23 @@ For `pull_request` rules: not supported yet. `true` makes the rule fail for ever
 
 `rules[].parameters.allowedMergeMethods` array
 
-For `pull_request` rules: the merge methods a pull request can land with on a targeted branch, `merge`, `squash`, or both. Any other value, or an empty list, is rejected with `InvalidArgument` (HTTP 400). Omit it to leave every method the repository allows. A method the repository's merge settings disable stays disabled, and when several `active` rulesets apply to the branch, only a method every one of them lists is allowed. [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) without a `mergeMethod` lands with an allowed method, and with any other method it returns `FailedPrecondition` (HTTP 400). When the repository allows none of the listed methods, every merge into the branch returns `FailedPrecondition` (HTTP 400). The ruleset's `bypassActors` are held to it too.
+For `pull_request` rules: the merge methods a pull request can land with on a targeted branch, `merge`, `squash`, or both. Any other value, or an empty list, is rejected with `InvalidArgument` (HTTP 400). Omit it to leave every method the repository allows. A method the repository's merge settings disable stays disabled, and when several `active` rulesets apply to the branch, only a method every one of them lists is allowed. [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) without a `mergeMethod` lands with an allowed method, and with any other method it returns `FailedPrecondition` (HTTP 400). When the repository allows none of the listed methods, every merge into the branch returns `FailedPrecondition` (HTTP 400). The ruleset's `bypassActors` are held to it too. Every merge is also refused when `merge` is the only method left and an `active` `required_linear_history` rule covers the branch, because that rule rejects merge commits. See [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request).
+
+`rules[].parameters.requiredReviewers` array
+
+For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
+
+`rules[].parameters.requiredReviewers[].group` object
+
+The group, named by its immutable public ID rather than by slug: the identity a `group` bypass actor carries. Required in each entry.
+
+`rules[].parameters.requiredReviewers[].group.id` string
+
+The group's immutable public ID (`grp_…`). Origin derives the group's organization from it. Required in each entry.
+
+`rules[].parameters.requiredReviewers[].minimumApprovals` integer
+
+Approvals needed from distinct members of the group, from 1 to 50. Defaults to 1.
 
 `rules[].parameters.requiredChecks` array
 
@@ -16183,9 +16353,13 @@ For `ref_name_pattern` rules, where it's required: an RE2 regular expression, 1 
 
 For `ref_name_pattern` rules: when `true`, the name must not match `pattern`. Defaults to `false`.
 
+`rules[].parameters.maxFileSizeBytes` integer
+
+For `max_file_size` rules, where it's required: the largest file a push can introduce, in bytes, from 1 to 104857600 (100 MiB, the limit every push is subject to regardless of rulesets). A push that introduces a larger file is rejected in full, including the other refs it changes, and files the repository already stores aren't judged again. The rule covers the whole push rather than one ref, so only a `push_repository` ruleset accepts it.
+
 `bypassActors` array
 
-Bypass principals to store. Each entry carries `bypassMode` and exactly one of `user`, `team`, `app`, or `originRole`; Origin assigns each actor's `id`. Identify a `user` by its public ID (`user_…`) in `user.id`. Values above 15 entries are rejected with `InvalidArgument` (HTTP 400).
+Bypass principals to store. Each entry carries `bypassMode` and exactly one of `user`, `group`, or `app`; Origin assigns each actor's `id`. Identify a `user` by its public ID (`user_…`) in `user.id` and a `group` by its public ID (`grp_…`) in `group.id`. Values above 15 entries are rejected with `InvalidArgument` (HTTP 400). A `group` entry is rejected the same way unless the group exists and belongs to an organization linked to the team that owns the repository's namespace; a repository whose namespace no team owns accepts no `group` entry.
 
 #### Response Fields
 
@@ -16227,7 +16401,7 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`.
 
 `rules[].parameters` object
 
@@ -16247,23 +16421,19 @@ When the bypass applies. Allowed values: `always`, `pull_request_only`.
 
 `bypassActors[].user` object
 
-A user principal. Exactly one of `user`, `team`, `app`, or `originRole` is present.
+A user principal. Exactly one of `user`, `group`, or `app` is present.
 
 `bypassActors[].user.id` string
 
 The user's public ID (`user_…`).
 
-`bypassActors[].team` object
+`bypassActors[].group` object
 
-A team principal.
+A group principal: a Cursor organization group whose members can bypass the ruleset.
 
-`bypassActors[].team.organizationPublicId` string
+`bypassActors[].group.id` string
 
-Immutable organization public ID.
-
-`bypassActors[].team.groupPublicId` string
-
-Immutable group public ID.
+The group's immutable public ID (`grp_…`), not its slug.
 
 `bypassActors[].app` object
 
@@ -16272,14 +16442,6 @@ An app principal.
 `bypassActors[].app.id` string
 
 App ID, prefixed `app_`.
-
-`bypassActors[].originRole` object
-
-A principal holding an Origin role.
-
-`bypassActors[].originRole.role` string
-
-Allowed values: `namespace_admin`, `repository_admin`, `repository_write`.
 
 ```bash
 curl --request POST \
@@ -16412,7 +16574,7 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`.
 
 `rules[].parameters` object
 
@@ -16432,23 +16594,19 @@ When the bypass applies. Allowed values: `always`, `pull_request_only`.
 
 `bypassActors[].user` object
 
-A user principal. Exactly one of `user`, `team`, `app`, or `originRole` is present.
+A user principal. Exactly one of `user`, `group`, or `app` is present.
 
 `bypassActors[].user.id` string
 
 The user's public ID (`user_…`).
 
-`bypassActors[].team` object
+`bypassActors[].group` object
 
-A team principal.
+A group principal: a Cursor organization group whose members can bypass the ruleset.
 
-`bypassActors[].team.organizationPublicId` string
+`bypassActors[].group.id` string
 
-Immutable organization public ID.
-
-`bypassActors[].team.groupPublicId` string
-
-Immutable group public ID.
+The group's immutable public ID (`grp_…`), not its slug.
 
 `bypassActors[].app` object
 
@@ -16457,14 +16615,6 @@ An app principal.
 `bypassActors[].app.id` string
 
 App ID, prefixed `app_`.
-
-`bypassActors[].originRole` object
-
-A principal holding an Origin role.
-
-`bypassActors[].originRole.role` string
-
-Allowed values: `namespace_admin`, `repository_admin`, `repository_write`.
 
 ```bash
 curl --request GET \
@@ -16535,7 +16685,7 @@ Stable Origin ruleset ID.
 
 `name` string Required
 
-Ruleset name.
+Ruleset name. Leading and trailing whitespace is trimmed. Maximum length: 120 characters, counted in UTF-16 code units, so an astral character such as an emoji counts twice. A longer name returns `InvalidArgument` (HTTP 400).
 
 `description` string
 
@@ -16559,11 +16709,11 @@ Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap 
 
 `rules` array
 
-Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
+Protection rules to store. Each entry carries `ruleType` and optional `parameters`; Origin assigns each rule's `id`. Values above 20 entries are rejected with `InvalidArgument` (HTTP 400). Each rule type runs in one kind of ruleset: a `merge_branch` ruleset accepts only the merge rule types `pull_request`, `require_status_checks`, and `require_branch_up_to_date`, and a `push_branch`, `push_tag`, or `push_repository` ruleset accepts only the push rule types `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`. A rule whose type never runs in the ruleset's `kind` returns `InvalidArgument` (HTTP 400).
 
 `rules[].ruleType` string Required
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`. Any other value, or a type the ruleset's `kind` doesn't accept, is rejected with `InvalidArgument` (HTTP 400).
 
 `rules[].parameters` object
 
@@ -16591,7 +16741,23 @@ For `pull_request` rules: not supported yet. `true` makes the rule fail for ever
 
 `rules[].parameters.allowedMergeMethods` array
 
-For `pull_request` rules: the merge methods a pull request can land with on a targeted branch, `merge`, `squash`, or both. Any other value, or an empty list, is rejected with `InvalidArgument` (HTTP 400). Omit it to leave every method the repository allows. A method the repository's merge settings disable stays disabled, and when several `active` rulesets apply to the branch, only a method every one of them lists is allowed. [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) without a `mergeMethod` lands with an allowed method, and with any other method it returns `FailedPrecondition` (HTTP 400). When the repository allows none of the listed methods, every merge into the branch returns `FailedPrecondition` (HTTP 400). The ruleset's `bypassActors` are held to it too.
+For `pull_request` rules: the merge methods a pull request can land with on a targeted branch, `merge`, `squash`, or both. Any other value, or an empty list, is rejected with `InvalidArgument` (HTTP 400). Omit it to leave every method the repository allows. A method the repository's merge settings disable stays disabled, and when several `active` rulesets apply to the branch, only a method every one of them lists is allowed. [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) without a `mergeMethod` lands with an allowed method, and with any other method it returns `FailedPrecondition` (HTTP 400). When the repository allows none of the listed methods, every merge into the branch returns `FailedPrecondition` (HTTP 400). The ruleset's `bypassActors` are held to it too. Every merge is also refused when `merge` is the only method left and an `active` `required_linear_history` rule covers the branch, because that rule rejects merge commits. See [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request).
+
+`rules[].parameters.requiredReviewers` array
+
+For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
+
+`rules[].parameters.requiredReviewers[].group` object
+
+The group, named by its immutable public ID rather than by slug: the identity a `group` bypass actor carries. Required in each entry.
+
+`rules[].parameters.requiredReviewers[].group.id` string
+
+The group's immutable public ID (`grp_…`). Origin derives the group's organization from it. Required in each entry.
+
+`rules[].parameters.requiredReviewers[].minimumApprovals` integer
+
+Approvals needed from distinct members of the group, from 1 to 50. Defaults to 1.
 
 `rules[].parameters.requiredChecks` array
 
@@ -16629,9 +16795,13 @@ For `ref_name_pattern` rules, where it's required: an RE2 regular expression, 1 
 
 For `ref_name_pattern` rules: when `true`, the name must not match `pattern`. Defaults to `false`.
 
+`rules[].parameters.maxFileSizeBytes` integer
+
+For `max_file_size` rules, where it's required: the largest file a push can introduce, in bytes, from 1 to 104857600 (100 MiB, the limit every push is subject to regardless of rulesets). A push that introduces a larger file is rejected in full, including the other refs it changes, and files the repository already stores aren't judged again. The rule covers the whole push rather than one ref, so only a `push_repository` ruleset accepts it.
+
 `bypassActors` array
 
-Bypass principals to store. Each entry carries `bypassMode` and exactly one of `user`, `team`, `app`, or `originRole`; Origin assigns each actor's `id`. Identify a `user` by its public ID (`user_…`) in `user.id`. Values above 15 entries are rejected with `InvalidArgument` (HTTP 400).
+Bypass principals to store. Each entry carries `bypassMode` and exactly one of `user`, `group`, or `app`; Origin assigns each actor's `id`. Identify a `user` by its public ID (`user_…`) in `user.id` and a `group` by its public ID (`grp_…`) in `group.id`. Values above 15 entries are rejected with `InvalidArgument` (HTTP 400). A `group` entry is rejected the same way unless the group exists and belongs to an organization linked to the team that owns the repository's namespace; a repository whose namespace no team owns accepts no `group` entry.
 
 #### Response Fields
 
@@ -16673,7 +16843,7 @@ Stable Origin ID for this rule.
 
 `rules[].ruleType` string
 
-Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`.
+Rule type. A `merge_branch` ruleset accepts `pull_request`, `require_status_checks`, and `require_branch_up_to_date`. A `push_branch`, `push_tag`, or `push_repository` ruleset accepts `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, and `required_linear_history`. A `push_repository` ruleset also accepts `max_file_size`.
 
 `rules[].parameters` object
 
@@ -16693,23 +16863,19 @@ When the bypass applies. Allowed values: `always`, `pull_request_only`.
 
 `bypassActors[].user` object
 
-A user principal. Exactly one of `user`, `team`, `app`, or `originRole` is present.
+A user principal. Exactly one of `user`, `group`, or `app` is present.
 
 `bypassActors[].user.id` string
 
 The user's public ID (`user_…`).
 
-`bypassActors[].team` object
+`bypassActors[].group` object
 
-A team principal.
+A group principal: a Cursor organization group whose members can bypass the ruleset.
 
-`bypassActors[].team.organizationPublicId` string
+`bypassActors[].group.id` string
 
-Immutable organization public ID.
-
-`bypassActors[].team.groupPublicId` string
-
-Immutable group public ID.
+The group's immutable public ID (`grp_…`), not its slug.
 
 `bypassActors[].app` object
 
@@ -16718,14 +16884,6 @@ An app principal.
 `bypassActors[].app.id` string
 
 App ID, prefixed `app_`.
-
-`bypassActors[].originRole` object
-
-A principal holding an Origin role.
-
-`bypassActors[].originRole.role` string
-
-Allowed values: `namespace_admin`, `repository_admin`, `repository_write`.
 
 ```bash
 curl --request PUT \
@@ -17223,42 +17381,46 @@ Every event Origin delivers, and each event's payload documented field by field.
 
 ### Events
 
-| Event                                      | Delivered when                                                                                                                                                                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `repository.created`                       | A repository is created.                                                                                                                                                                                                                          |
-| `repository.deleted`                       | A repository is deleted.                                                                                                                                                                                                                          |
-| `repository.pushed`                        | One or more refs change in a push.                                                                                                                                                                                                                |
-| `repository.metadata.updated`              | A repository's default branch changes.                                                                                                                                                                                                            |
-| `pull_request.created`                     | A pull request opens.                                                                                                                                                                                                                             |
-| `pull_request.head_ref.pushed`             | The pull request head advances.                                                                                                                                                                                                                   |
-| `pull_request.base_ref.updated`            | The base ref or resolved base commit changes.                                                                                                                                                                                                     |
-| `pull_request.metadata.updated`            | The title or description changes.                                                                                                                                                                                                                 |
-| `pull_request.closed`                      | A pull request closes without merging, including when Origin closes it because a push left its head with no history in common with its base.                                                                                                      |
-| `pull_request.merged`                      | A pull request merges.                                                                                                                                                                                                                            |
-| `pull_request.reopened`                    | A closed pull request reopens.                                                                                                                                                                                                                    |
-| `pull_request.published`                   | A draft becomes open.                                                                                                                                                                                                                             |
-| `pull_request.merge_when_ready.enabled`    | Auto-merge is turned on for a pull request. In [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview).                                                                                                                               |
-| `pull_request.merge_when_ready.disabled`   | Auto-merge is turned off on a pull request without merging it, by a principal or by Origin. A pull request that auto-merge merges delivers `pull_request.merged` instead. In [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview). |
-| `pull_request.label.added`                 | A label is assigned to a pull request.                                                                                                                                                                                                            |
-| `pull_request.label.removed`               | A label is unassigned from a pull request, including when the label definition is deleted.                                                                                                                                                        |
-| `pull_request.comment.created`             | A visible pull request comment is created.                                                                                                                                                                                                        |
-| `pull_request.comment.reaction.added`      | A reaction is placed on a pull request comment. Re-placing a reaction the reactor already holds delivers nothing.                                                                                                                                 |
-| `pull_request.comment.reaction.removed`    | A reaction is removed from a pull request comment. Removing a reaction the reactor does not hold delivers nothing.                                                                                                                                |
-| `pull_request.review.submitted`            | A review is submitted with any verdict.                                                                                                                                                                                                           |
-| `pull_request.review.dismissed`            | A submitted review is dismissed, explicitly or by being superseded.                                                                                                                                                                               |
-| `pull_request.reviewer.added`              | A reviewer is requested.                                                                                                                                                                                                                          |
-| `pull_request.reviewer.removed`            | A reviewer is removed.                                                                                                                                                                                                                            |
-| `pull_request.reviewer.rerequested`        | A reviewer is requested again.                                                                                                                                                                                                                    |
-| `repository.check_run.created`             | A check run is created.                                                                                                                                                                                                                           |
-| `repository.check_run.updated`             | A check run is updated without completing: a post that Origin applies leaves it `queued`, `in_progress`, or `failing`, including one that reopens a completed run.                                                                                |
-| `repository.check_run.completed`           | A check run completes.                                                                                                                                                                                                                            |
-| `repository.check_run.rerequested`         | A completed check run is re-requested. Delivered only to the app that owns the run.                                                                                                                                                               |
-| `repository.check_run.annotations.created` | Annotations are added to a check run with [Create Check Run Annotations](https://cursor.com/docs/api/origin/llms-full.txt#create-check-run-annotations). Each request delivers one event.                                                         |
-| `installation.created`                     | The app is installed.                                                                                                                                                                                                                             |
-| `installation.updated`                     | Scopes, repository selection, or the owner namespace slug change.                                                                                                                                                                                 |
-| `installation.suspended`                   | The installation is suspended.                                                                                                                                                                                                                    |
-| `installation.unsuspended`                 | A suspended installation is restored.                                                                                                                                                                                                             |
-| `installation.deleted`                     | The app is uninstalled.                                                                                                                                                                                                                           |
+| Event                                      | Delivered when                                                                                                                                                                                                                                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `repository.created`                       | A repository is created.                                                                                                                                                                                                                                                                 |
+| `repository.deleted`                       | A repository is deleted.                                                                                                                                                                                                                                                                 |
+| `repository.pushed`                        | One or more refs change in a push.                                                                                                                                                                                                                                                       |
+| `repository.metadata.updated`              | A repository's default branch changes.                                                                                                                                                                                                                                                   |
+| `repository.label.created`                 | A label definition is created, including one that `createMissing` creates on [Set Pull Request Labels](https://cursor.com/docs/api/origin/llms-full.txt#set-pull-request-labels) or [Add Pull Request Labels](https://cursor.com/docs/api/origin/llms-full.txt#add-pull-request-labels). |
+| `repository.label.updated`                 | A label definition's name, color, or description changes. An update that changes none of them delivers nothing.                                                                                                                                                                          |
+| `repository.label.deleted`                 | A label definition is deleted.                                                                                                                                                                                                                                                           |
+| `pull_request.created`                     | A pull request opens.                                                                                                                                                                                                                                                                    |
+| `pull_request.head_ref.pushed`             | The pull request head advances.                                                                                                                                                                                                                                                          |
+| `pull_request.base_ref.updated`            | The pull request is retargeted onto a different base branch. Its base branch advancing doesn't deliver this event.                                                                                                                                                                       |
+| `pull_request.metadata.updated`            | The title or description changes.                                                                                                                                                                                                                                                        |
+| `pull_request.closed`                      | A pull request closes without merging, including when Origin closes it because a push left its head with no history in common with its base.                                                                                                                                             |
+| `pull_request.merged`                      | A pull request merges.                                                                                                                                                                                                                                                                   |
+| `pull_request.reopened`                    | A closed pull request reopens.                                                                                                                                                                                                                                                           |
+| `pull_request.published`                   | A draft becomes open.                                                                                                                                                                                                                                                                    |
+| `pull_request.unpublished`                 | An open pull request becomes a draft.                                                                                                                                                                                                                                                    |
+| `pull_request.merge_when_ready.enabled`    | Auto-merge is turned on for a pull request. In [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview).                                                                                                                                                                      |
+| `pull_request.merge_when_ready.disabled`   | Auto-merge is turned off on a pull request without merging it, by a principal or by Origin. A pull request that auto-merge merges delivers `pull_request.merged` instead. In [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview).                                        |
+| `pull_request.label.added`                 | A label is assigned to a pull request.                                                                                                                                                                                                                                                   |
+| `pull_request.label.removed`               | A label is unassigned from a pull request, including when the label definition is deleted.                                                                                                                                                                                               |
+| `pull_request.comment.created`             | A visible pull request comment is created.                                                                                                                                                                                                                                               |
+| `pull_request.comment.reaction.added`      | A reaction is placed on a pull request comment. Re-placing a reaction the reactor already holds delivers nothing.                                                                                                                                                                        |
+| `pull_request.comment.reaction.removed`    | A reaction is removed from a pull request comment. Removing a reaction the reactor does not hold delivers nothing.                                                                                                                                                                       |
+| `pull_request.review.submitted`            | A review is submitted with any verdict.                                                                                                                                                                                                                                                  |
+| `pull_request.review.dismissed`            | A submitted review is dismissed, explicitly or by being superseded.                                                                                                                                                                                                                      |
+| `pull_request.reviewer.added`              | A reviewer is requested.                                                                                                                                                                                                                                                                 |
+| `pull_request.reviewer.removed`            | A reviewer is removed.                                                                                                                                                                                                                                                                   |
+| `pull_request.reviewer.rerequested`        | A reviewer is requested again.                                                                                                                                                                                                                                                           |
+| `repository.check_run.created`             | A check run is created.                                                                                                                                                                                                                                                                  |
+| `repository.check_run.updated`             | A check run is updated without completing: a post that Origin applies leaves it `queued`, `in_progress`, or `failing`, including one that reopens a completed run.                                                                                                                       |
+| `repository.check_run.completed`           | A check run completes.                                                                                                                                                                                                                                                                   |
+| `repository.check_run.rerequested`         | A completed check run is re-requested. Delivered only to the app that owns the run.                                                                                                                                                                                                      |
+| `repository.check_run.annotations.created` | Annotations are added to a check run with [Create Check Run Annotations](https://cursor.com/docs/api/origin/llms-full.txt#create-check-run-annotations). Each request delivers one event.                                                                                                |
+| `installation.created`                     | The app is installed.                                                                                                                                                                                                                                                                    |
+| `installation.updated`                     | Scopes, repository selection, or the owner namespace slug change.                                                                                                                                                                                                                        |
+| `installation.suspended`                   | The installation is suspended.                                                                                                                                                                                                                                                           |
+| `installation.unsuspended`                 | A suspended installation is restored.                                                                                                                                                                                                                                                    |
+| `installation.deleted`                     | The app is uninstalled.                                                                                                                                                                                                                                                                  |
 
 Every event's payload shape is documented field by field in [Event payloads](https://cursor.com/docs/api/origin/llms-full.txt#event-payloads).
 
@@ -17266,7 +17428,7 @@ The five `installation.*` events go to the app itself rather than to a repositor
 
 A new app subscribes to none of the repository-scoped events. Select the ones you need in the app's settings, or set them with the `events` field of [Create App](https://cursor.com/docs/api/origin/llms-full.txt#create-app) or [Update App](https://cursor.com/docs/api/origin/llms-full.txt#update-app). Origin delivers an event only to apps subscribed to it, with a webhook URL set, whose installation covers the repository and holds the scope the event requires. Otherwise there's no delivery and no error: nothing is sent, and nothing appears in [List Webhook Deliveries](https://cursor.com/docs/api/origin/llms-full.txt#list-webhook-deliveries).
 
-Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. Pushes to native Origin repositories are delivered as usual, and the mirror state does not affect any other event. `repository.deleted` is delivered for a repository mirrored from GitHub: stopping the sync deletes the Cursor-side repository only, and GitHub sends nothing for it.
+Origin does not deliver `repository.pushed` for a repository it mirrors from GitHub. GitHub owns those pushes and sends its own push webhooks, so an Origin delivery would duplicate them. GitHub also owns such a repository's labels, so Origin doesn't deliver `repository.label.created`, `repository.label.updated`, or `repository.label.deleted` for it either. Pushes and label changes in native Origin repositories are delivered as usual, and the mirror state does not affect any other event. `repository.deleted` is delivered for a repository mirrored from GitHub: stopping the sync deletes the Cursor-side repository only, and GitHub sends nothing for it.
 
 ### Event payloads
 
@@ -17778,12 +17940,322 @@ Web URL for this repository on Cursor.
 }
 ```
 
+### Repository Label Events
+
+EVENT
+
+`repository.label.created`
+`repository.label.deleted`
+
+A repository label definition was created or deleted. Assignments to pull requests arrive as `pull_request.label.added` and `.removed`.
+
+#### Payload Fields
+
+`label` object
+
+The label as created, or as it was when deleted.
+
+`label.id` string
+
+`label.name` string
+
+`label.color` string
+
+Six-character hex color without a leading `#`.
+
+`label.description` string
+
+`repository` object
+
+The repository the label belongs to.
+
+`repository.id` string
+
+`repository.name` string
+
+`repository.owner` object
+
+The owner of a repo.
+
+`repository.owner.slug` string
+
+Unique URL-friendly name of the owner.
+
+`repository.owner.id` string
+
+Unique ID of the owner namespace.
+
+`repository.owner.type` string
+
+`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`actor` object
+
+The principal that created or deleted the label, when known.
+
+`actor.user` object
+
+`actor.user.id` string
+
+`actor.user.email` string Required
+
+The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
+
+`actor.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
+
+`actor.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`actor.user.performedVia` object
+
+Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
+
+`actor.user.performedVia.app` object
+
+The app that acted on the user's behalf.
+
+`actor.user.performedVia.app.id` string
+
+`actor.user.performedVia.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.user.performedVia.serviceAccount` object
+
+The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
+
+`actor.user.performedVia.serviceAccount.id` string
+
+`actor.user.performedVia.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.user.performedVia.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`actor.app` object
+
+`actor.app.id` string
+
+`actor.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.serviceAccount` object
+
+`actor.serviceAccount.id` string
+
+`actor.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+**Sample `event.payload`:**
+
+```json
+{
+  "label": {
+    "id": "lbl_01k2ja2000e0080000000000m1",
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something isn't working"
+  },
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    }
+  },
+  "actor": {
+    "user": {
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
+    }
+  }
+}
+```
+
+### Repository Label Updated
+
+EVENT
+
+`repository.label.updated`
+
+A repository label definition was updated.
+
+#### Payload Fields
+
+`label` object
+
+The label after the update.
+
+`label.id` string
+
+`label.name` string
+
+`label.color` string
+
+Six-character hex color without a leading `#`.
+
+`label.description` string
+
+`repository` object
+
+The repository the label belongs to.
+
+`repository.id` string
+
+`repository.name` string
+
+`repository.owner` object
+
+The owner of a repo.
+
+`repository.owner.slug` string
+
+Unique URL-friendly name of the owner.
+
+`repository.owner.id` string
+
+Unique ID of the owner namespace.
+
+`repository.owner.type` string
+
+`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`actor` object
+
+The principal that updated the label, when known.
+
+`actor.user` object
+
+`actor.user.id` string
+
+`actor.user.email` string Required
+
+The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
+
+`actor.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
+
+`actor.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`actor.user.performedVia` object
+
+Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
+
+`actor.user.performedVia.app` object
+
+The app that acted on the user's behalf.
+
+`actor.user.performedVia.app.id` string
+
+`actor.user.performedVia.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.user.performedVia.serviceAccount` object
+
+The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
+
+`actor.user.performedVia.serviceAccount.id` string
+
+`actor.user.performedVia.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.user.performedVia.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`actor.app` object
+
+`actor.app.id` string
+
+`actor.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.serviceAccount` object
+
+`actor.serviceAccount.id` string
+
+`actor.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`previousLabel` object
+
+The label as it was before the update, when known. Compare it with `label` to see which fields changed, such as the previous name after a rename.
+
+`previousLabel.id` string
+
+`previousLabel.name` string
+
+`previousLabel.color` string
+
+Six-character hex color without a leading `#`.
+
+`previousLabel.description` string
+
+**Sample `event.payload`:**
+
+```json
+{
+  "label": {
+    "id": "lbl_01k2ja2000e0080000000000m1",
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something isn't working"
+  },
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    }
+  },
+  "actor": {
+    "user": {
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
+    }
+  },
+  "previousLabel": {
+    "id": "lbl_01k2ja2000e0080000000000m1",
+    "name": "defect",
+    "color": "ee0701",
+    "description": "Something isn't working"
+  }
+}
+```
+
 ### Pull Request Events
 
 EVENT
 
 `pull_request.created`
 `pull_request.published`
+`pull_request.unpublished`
 `pull_request.reopened`
 `pull_request.closed`
 `pull_request.merged`
@@ -17792,7 +18264,7 @@ EVENT
 `pull_request.base_ref.updated`
 `pull_request.stack_parent.updated`
 
-A pull request lifecycle change. The lifecycle action is the envelope's `event.type`; there is no separate action field.
+A pull request lifecycle change. The lifecycle action is the envelope's `event.type`; there is no separate action field. `pull_request.base_ref.updated` is delivered when the pull request is retargeted onto a different base branch, not when its base branch advances.
 
 #### Payload Fields
 
@@ -18020,7 +18492,7 @@ When this version was created. RFC 3339 timestamp.
 
 `pullRequest.version.potentialMergeCommit` object
 
-Origin's test merge of this version and how far its preparation got (`state`). Computed for this version: the commit's second parent is `head_sha`; its first parent is the test merge's `base_sha`, the base branch tip at preparation, which can be newer than this version's `base_sha`. The `pull/\<number>/merge` ref points only at the latest version's commit; older commits stay readable by SHA through the API (`GetCommit`), though not fetchable by SHA over git. Distinct from `PullRequest.merge_commit_sha`, which is set only once merged. Set on `PullRequest.version` and `PullRequestWebhook.version`.
+Origin's test merge of this version and how far its preparation got (`state`). Computed for this version: the commit's second parent is `head_sha`; its first parent is the test merge's `base_sha`, the base branch tip at preparation, which can be newer than this version's `base_sha`. The `pull/\<number>/merge` ref points only at the latest version's commit; older commits stay readable by SHA through the API (`GetCommit`), though not fetchable by SHA over git. Distinct from `PullRequest.merge_commit_sha`, which is set only once merged. Always present on `PullRequest.version` and `PullRequestWebhook.version`; read `state` rather than testing for `sha`.
 
 `pullRequest.version.potentialMergeCommit.state` string
 
@@ -18057,6 +18529,18 @@ Unique ID of the owner namespace.
 `repository.owner.type` string
 
 `team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`previousBase` object
+
+Set on `pull_request.base_ref.updated`: the base ref and base `sha` the pull request had before it was retargeted.
+
+`previousBase.ref` string
+
+The ref this side points at, as Origin records it.
+
+`previousBase.sha` string
+
+Tip commit SHA of this side at the change's latest version. For `base` this is the version's `base_sha`, which can lag the branch's current tip (see `PullRequestVersion`).
 
 **Sample `event.payload`:**
 
@@ -18333,7 +18817,7 @@ Unique ID of the owner namespace.
 
 `disabledReason` string
 
-Why auto-merge was turned off, as recorded on the pull request. Unset only for a disable recorded before the reason was. New reasons are added over time; decode with unknown values tolerated. One of `manual`, `merge_failed`, `pull_request_closed`, `expired`, `repository_deleted`, `enabler_lost_access`.
+Why auto-merge was turned off, as recorded on the pull request. Unset only for a disable recorded before the reason was. New reasons are added over time; decode with unknown values tolerated. One of `manual`, `merge_failed`, `pull_request_closed`, `expired`, `repository_deleted`, `enabler_lost_access`, `head_moved`.
 
 `disabledBy` object
 
@@ -19430,6 +19914,18 @@ The product name Cursor shows for the account, such as a Grok bot's name; never 
 Public Origin group identity (`grp_…`). Currently id-only.
 
 `reviewer.group.id` string
+
+`reviewer.serviceAccount` object
+
+`reviewer.serviceAccount.id` string
+
+`reviewer.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`reviewer.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
 
 `createdVia` string
 
@@ -21620,6 +22116,582 @@ The app's registered display name, never empty when present. Omitted when the ap
     "id": "app_01k2ja2000e0080000000000a1",
     "displayName": "CI Status Bot"
   }
+}
+```
+
+### Pull Request Commandeered
+
+EVENT
+
+`pull_request.commandeered`
+
+Authorship transfer. The snapshot author is the new author.
+
+#### Payload Fields
+
+`pullRequest` object
+
+Post-swap pull request. Assigned labels are omitted.
+
+`pullRequest.id` string
+
+Stable Origin pull request identifier.
+
+`pullRequest.number` string
+
+Pull request number within its repository.
+
+`pullRequest.state` string
+
+"open" or "closed". A draft is "open"; merged and closed pull requests are both "closed".
+
+`pullRequest.draft` boolean
+
+Whether the pull request is still a draft.
+
+`pullRequest.merged` boolean
+
+Whether the pull request has been merged.
+
+`pullRequest.title` string
+
+Pull request title.
+
+`pullRequest.body` string
+
+Pull request description.
+
+`pullRequest.head` object
+
+The source side of the pull request - what is being merged in.
+
+`pullRequest.head.ref` string
+
+The ref this side points at, as Origin records it.
+
+`pullRequest.head.sha` string
+
+Tip commit SHA of this side at the change's latest version. For `base` this is the version's `base_sha`, which can lag the branch's current tip (see `PullRequestVersion`).
+
+`pullRequest.base` object
+
+The target side of the pull request — what it merges into.
+
+`pullRequest.base.ref` string
+
+The ref this side points at, as Origin records it.
+
+`pullRequest.base.sha` string
+
+Tip commit SHA of this side at the change's latest version. For `base` this is the version's `base_sha`, which can lag the branch's current tip (see `PullRequestVersion`).
+
+`pullRequest.author` object
+
+The principal that opened the pull request.
+
+`pullRequest.author.user` object
+
+`pullRequest.author.user.id` string
+
+`pullRequest.author.user.email` string Required
+
+The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
+
+`pullRequest.author.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
+
+`pullRequest.author.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`pullRequest.author.user.performedVia` object
+
+Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
+
+`pullRequest.author.user.performedVia.app` object
+
+The app that acted on the user's behalf.
+
+`pullRequest.author.user.performedVia.app.id` string
+
+`pullRequest.author.user.performedVia.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`pullRequest.author.user.performedVia.serviceAccount` object
+
+The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
+
+`pullRequest.author.user.performedVia.serviceAccount.id` string
+
+`pullRequest.author.user.performedVia.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`pullRequest.author.user.performedVia.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`pullRequest.author.app` object
+
+`pullRequest.author.app.id` string
+
+`pullRequest.author.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`pullRequest.author.serviceAccount` object
+
+`pullRequest.author.serviceAccount.id` string
+
+`pullRequest.author.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`pullRequest.author.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`pullRequest.createdAt` string
+
+When the pull request was opened. RFC 3339 timestamp.
+
+`pullRequest.updatedAt` string
+
+When the pull request was last updated. RFC 3339 timestamp.
+
+`pullRequest.closedAt` string
+
+When the pull request was closed or merged; unset while open. RFC 3339 timestamp.
+
+`pullRequest.mergedAt` string
+
+When the pull request was merged; unset unless merged. RFC 3339 timestamp.
+
+`pullRequest.mergeCommitSha` string
+
+SHA of the commit the merge wrote to the base branch; set once merged, unset before. The pre-merge preview is the `pull/\<number>/merge` ref (see GetGitRef), a different commit.
+
+`pullRequest.additions` integer
+
+Lines added by the pull request's latest version.
+
+`pullRequest.deletions` integer
+
+Lines deleted by the pull request's latest version.
+
+`pullRequest.changedFiles` integer
+
+Files changed by the pull request's latest version.
+
+`pullRequest.stack` object
+
+Stack membership. Unset when the pull request is not part of a stack.
+
+`pullRequest.stack.id` string
+
+Stable stack identifier. Pass it as `stack_id` to `ListPullRequests` to list the stack's members.
+
+`pullRequest.stack.parentPullRequest` object
+
+The pull request this one is stacked on. Unset for the root of the stack. A merged parent stays referenced until the child is retargeted or re-parented.
+
+`pullRequest.stack.parentPullRequest.id` string
+
+Immutable Origin change id.
+
+`pullRequest.stack.parentPullRequest.number` string
+
+`pullRequest.stack.parentPullRequest.repository` object
+
+Repository reference for this pull request.
+
+`pullRequest.stack.parentPullRequest.repository.id` string
+
+`pullRequest.stack.parentPullRequest.repository.name` string
+
+`pullRequest.stack.parentPullRequest.repository.owner` object
+
+The owner of a repo.
+
+`pullRequest.stack.parentPullRequest.repository.owner.slug` string
+
+Unique URL-friendly name of the owner.
+
+`pullRequest.stack.parentPullRequest.repository.owner.id` string
+
+Unique ID of the owner namespace.
+
+`pullRequest.stack.parentPullRequest.repository.owner.type` string
+
+`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`pullRequest.webUrl` string
+
+Web URL for this pull request on Cursor.
+
+`pullRequest.version` object
+
+The pull request's latest version.
+
+`pullRequest.version.number` string
+
+Monotonic version number within the change (1-based).
+
+`pullRequest.version.headSha` string
+
+Head commit SHA for this version.
+
+`pullRequest.version.baseSha` string
+
+Base commit SHA this version is diffed against: the base branch tip as resolved when the version was recorded. It can lag the branch's current tip until the next head push or retarget.
+
+`pullRequest.version.createdAt` string
+
+When this version was created. RFC 3339 timestamp.
+
+`pullRequest.version.potentialMergeCommit` object
+
+Origin's test merge of this version and how far its preparation got (`state`). Computed for this version: the commit's second parent is `head_sha`; its first parent is the test merge's `base_sha`, the base branch tip at preparation, which can be newer than this version's `base_sha`. The `pull/\<number>/merge` ref points only at the latest version's commit; older commits stay readable by SHA through the API (`GetCommit`), though not fetchable by SHA over git. Distinct from `PullRequest.merge_commit_sha`, which is set only once merged. Always present on `PullRequest.version` and `PullRequestWebhook.version`; read `state` rather than testing for `sha`.
+
+`pullRequest.version.potentialMergeCommit.state` string
+
+How far the preparation of this version got; a new version starts as `unknown` until its own preparation lands. Unrecognized values must be treated as `unknown`. One of `unknown`, `prepared`, `merge_conflict`.
+
+`pullRequest.version.potentialMergeCommit.sha` string
+
+Set only when `state` is `prepared`: the two-parent test-merge commit, second parent the version's `head_sha`, first parent `base_sha`; the tip of `pull/\<number>/merge` while this version is the latest; readable by SHA afterwards.
+
+`pullRequest.version.potentialMergeCommit.baseSha` string
+
+Set whenever the state was computed (`prepared` or `merge_conflict`): the base branch tip the merge was attempted against at preparation time; can be newer than the version's `base_sha`, not refreshed when the base merely advances; re-prepared on reopen. May be absent on a `merge_conflict` recorded before this field carried it.
+
+`repository` object
+
+The repository the pull request belongs to.
+
+`repository.id` string
+
+`repository.name` string
+
+`repository.owner` object
+
+The owner of a repo.
+
+`repository.owner.slug` string
+
+Unique URL-friendly name of the owner.
+
+`repository.owner.id` string
+
+Unique ID of the owner namespace.
+
+`repository.owner.type` string
+
+`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`previousAuthor` object
+
+The author the pull request was taken from.
+
+`previousAuthor.user` object
+
+`previousAuthor.user.id` string
+
+`previousAuthor.user.email` string Required
+
+The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
+
+`previousAuthor.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
+
+`previousAuthor.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`previousAuthor.user.performedVia` object
+
+Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
+
+`previousAuthor.user.performedVia.app` object
+
+The app that acted on the user's behalf.
+
+`previousAuthor.user.performedVia.app.id` string
+
+`previousAuthor.user.performedVia.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`previousAuthor.user.performedVia.serviceAccount` object
+
+The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
+
+`previousAuthor.user.performedVia.serviceAccount.id` string
+
+`previousAuthor.user.performedVia.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`previousAuthor.user.performedVia.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`previousAuthor.app` object
+
+`previousAuthor.app.id` string
+
+`previousAuthor.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`previousAuthor.serviceAccount` object
+
+`previousAuthor.serviceAccount.id` string
+
+`previousAuthor.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`previousAuthor.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+**Sample `event.payload`:**
+
+```json
+{
+  "pullRequest": {
+    "id": "pr_01k2ja2000e0080000000000d4",
+    "number": "17",
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "title": "Add launch telemetry",
+    "body": "Adds structured launch telemetry to the ignition path.",
+    "head": {
+      "ref": "add-telemetry",
+      "sha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4"
+    },
+    "base": {
+      "ref": "add-telemetry-schema",
+      "sha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8"
+    },
+    "author": {
+      "user": {
+        "id": "user_01k2ja2000e0080000000000c3",
+        "email": "jane@acme.dev"
+      }
+    },
+    "createdAt": "2026-08-01T09:30:00Z",
+    "updatedAt": "2026-08-02T14:45:00Z",
+    "additions": 128,
+    "deletions": 46,
+    "changedFiles": 5,
+    "webUrl": "https://cursor.com/codebase/acme/rocket/pull/17",
+    "stack": {
+      "id": "stk_01k2ja2000e0080000000000s1",
+      "parentPullRequest": {
+        "id": "pr_01k2ja2000e0080000000000d3",
+        "number": "16",
+        "repository": {
+          "id": "repo_01k2ja2000e0080000000000q4",
+          "name": "rocket",
+          "owner": {
+            "slug": "acme",
+            "id": "ns_01k2ja2000e0080000000000p3",
+            "type": "team"
+          }
+        }
+      }
+    },
+    "version": {
+      "number": "3",
+      "headSha": "9a41f0c3d2b8e7f6a5c4d3e2f1b0a9c8d7e6f5a4",
+      "baseSha": "3b1f9c2d8a7e6f5049c8b7a6d5e4f3a2b1c0d9e8",
+      "createdAt": "2026-08-01T09:30:00Z"
+    }
+  },
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    }
+  },
+  "previousAuthor": {
+    "user": {
+      "id": "user_01k2ja2000e0080000000000c2",
+      "email": "alex@acme.dev"
+    }
+  }
+}
+```
+
+### Repository Ruleset Events
+
+EVENT
+
+`repository.ruleset.created`
+`repository.ruleset.updated`
+`repository.ruleset.deleted`
+
+A repository ruleset was created, updated or deleted. The payload names the ruleset and the principal that changed it; `GetRuleset` returns the current definition.
+
+#### Payload Fields
+
+`repository` object
+
+The repository the ruleset belongs to.
+
+`repository.id` string
+
+`repository.name` string
+
+`repository.owner` object
+
+The owner of a repo.
+
+`repository.owner.slug` string
+
+Unique URL-friendly name of the owner.
+
+`repository.owner.id` string
+
+Unique ID of the owner namespace.
+
+`repository.owner.type` string
+
+`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
+
+`ruleset` object
+
+The ruleset as the write left it; on `repository.ruleset.deleted`, as it was when deleted.
+
+`ruleset.id` string
+
+Stable Origin ruleset id.
+
+`ruleset.name` string
+
+`ruleset.kind` string
+
+One of `merge_branch`, `push_branch`, `push_tag`, `push_repository`.
+
+`ruleset.enforcement` string
+
+One of `active`, `evaluate`, `disabled`.
+
+`ruleset.ruleTypes` array
+
+The `rule_type` of each rule, in the ruleset's order.
+
+`actor` object
+
+The principal whose write produced the event. Absent for a write with no principal, or when Origin could not resolve it.
+
+`actor.user` object
+
+`actor.user.id` string
+
+`actor.user.email` string Required
+
+The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
+
+`actor.user.displayName` string
+
+Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
+
+`actor.user.handle` string
+
+The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
+
+`actor.user.performedVia` object
+
+Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
+
+`actor.user.performedVia.app` object
+
+The app that acted on the user's behalf.
+
+`actor.user.performedVia.app.id` string
+
+`actor.user.performedVia.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.user.performedVia.serviceAccount` object
+
+The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
+
+`actor.user.performedVia.serviceAccount.id` string
+
+`actor.user.performedVia.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.user.performedVia.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`actor.app` object
+
+`actor.app.id` string
+
+`actor.app.displayName` string
+
+The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
+
+`actor.serviceAccount` object
+
+`actor.serviceAccount.id` string
+
+`actor.serviceAccount.type` string
+
+Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
+
+`actor.serviceAccount.displayName` string
+
+The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
+
+`occurredAt` string
+
+When the write happened. RFC 3339 timestamp.
+
+**Sample `event.payload`:**
+
+```json
+{
+  "repository": {
+    "id": "repo_01k2ja2000e0080000000000q4",
+    "name": "rocket",
+    "owner": {
+      "slug": "acme",
+      "id": "ns_01k2ja2000e0080000000000p3",
+      "type": "team"
+    }
+  },
+  "ruleset": {
+    "id": "rs_01k2ja2000e0080000000000t7",
+    "name": "require-review",
+    "kind": "merge_branch",
+    "enforcement": "active",
+    "ruleTypes": [
+      "pull_request",
+      "require_status_checks"
+    ]
+  },
+  "actor": {
+    "user": {
+      "id": "user_01k2ja2000e0080000000000c3",
+      "email": "jane@acme.dev"
+    }
+  },
+  "occurredAt": "2026-08-03T09:15:00Z"
 }
 ```
 
