@@ -253,4 +253,3 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Installation Unsuspended](https://cursor.com/docs/api/origin/reference/installation-unsuspended.md)
 - [Installation Deleted](https://cursor.com/docs/api/origin/reference/installation-deleted.md)
 - [Pull Request Commandeered](https://cursor.com/docs/api/origin/reference/pull-request-commandeered.md)
-- [Repository Ruleset Events](https://cursor.com/docs/api/origin/reference/repository-ruleset-events.md)

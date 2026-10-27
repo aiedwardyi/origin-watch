@@ -3348,11 +3348,11 @@ Stable, app-chosen key identifying the logical suite across attempts.
 
 `checkSuite.name` string Required
 
-Human-facing suite name.
+Human-facing suite name. Maximum length: 255 characters.
 
 `checkSuite.detailsUrl` string
 
-Optional link to more detail about the suite as a whole.
+Optional http(s) link to more detail about the suite as a whole. Maximum length: 8192 characters.
 
 `checkSuite.externalId` string Required
 
@@ -3368,7 +3368,7 @@ Stable, app-chosen key identifying the logical check across attempts.
 
 `checkRun.name` string Required
 
-Human-facing check-run name.
+Human-facing check-run name. Maximum length: 255 characters.
 
 `checkRun.status` string Required
 
@@ -3392,7 +3392,7 @@ When the check run completed. A value more than 60 seconds in the future returns
 
 `checkRun.detailsUrl` string
 
-Optional link to more detail about this specific check run (e.g. the provider's job/build URL).
+Optional http(s) link to more detail about this specific check run (e.g. the provider's job/build URL). Maximum length: 8192 characters.
 
 `checkRun.externalId` string Required
 
@@ -3875,11 +3875,11 @@ Stable, app-chosen key identifying the logical suite across attempts.
 
 `checkSuite.name` string Required
 
-Human-facing suite name.
+Human-facing suite name. Maximum length: 255 characters.
 
 `checkSuite.detailsUrl` string
 
-Optional link to more detail about the suite as a whole.
+Optional http(s) link to more detail about the suite as a whole. Maximum length: 8192 characters.
 
 `checkSuite.externalId` string Required
 
@@ -3895,7 +3895,7 @@ Stable, app-chosen key identifying the logical check across attempts.
 
 `checkRuns[0].name` string Required
 
-Human-facing check-run name.
+Human-facing check-run name. Maximum length: 255 characters.
 
 `checkRuns[0].status` string Required
 
@@ -3919,7 +3919,7 @@ When the check run completed. A value more than 60 seconds in the future returns
 
 `checkRuns[0].detailsUrl` string
 
-Optional link to more detail about this specific check run (e.g. the provider's job/build URL).
+Optional http(s) link to more detail about this specific check run (e.g. the provider's job/build URL). Maximum length: 8192 characters.
 
 `checkRuns[0].externalId` string Required
 
@@ -22529,169 +22529,6 @@ The product name Cursor shows for the account, such as a Grok bot's name; never 
       "email": "alex@acme.dev"
     }
   }
-}
-```
-
-### Repository Ruleset Events
-
-EVENT
-
-`repository.ruleset.created`
-`repository.ruleset.updated`
-`repository.ruleset.deleted`
-
-A repository ruleset was created, updated or deleted. The payload names the ruleset and the principal that changed it; `GetRuleset` returns the current definition.
-
-#### Payload Fields
-
-`repository` object
-
-The repository the ruleset belongs to.
-
-`repository.id` string
-
-`repository.name` string
-
-`repository.owner` object
-
-The owner of a repo.
-
-`repository.owner.slug` string
-
-Unique URL-friendly name of the owner.
-
-`repository.owner.id` string
-
-Unique ID of the owner namespace.
-
-`repository.owner.type` string
-
-`team` or `user`. Output-only; unset when unknown. One of `team`, `user`.
-
-`ruleset` object
-
-The ruleset as the write left it; on `repository.ruleset.deleted`, as it was when deleted.
-
-`ruleset.id` string
-
-Stable Origin ruleset id.
-
-`ruleset.name` string
-
-`ruleset.kind` string
-
-One of `merge_branch`, `push_branch`, `push_tag`, `push_repository`.
-
-`ruleset.enforcement` string
-
-One of `active`, `evaluate`, `disabled`.
-
-`ruleset.ruleTypes` array
-
-The `rule_type` of each rule, in the ruleset's order.
-
-`actor` object
-
-The principal whose write produced the event. Absent for a write with no principal, or when Origin could not resolve it.
-
-`actor.user` object
-
-`actor.user.id` string
-
-`actor.user.email` string Required
-
-The account's email. On pull request, review, comment, check, requested reviewer, and mergeability responses it is empty unless the caller holds `repository:members:read` on the repository.
-
-`actor.user.displayName` string
-
-Human-readable display name: the account's first and last name, each trimmed, joined with a space — exactly the name the product UI renders. Omitted when the account has no name; never synthesized from the email, the id, or any other field.
-
-`actor.user.handle` string
-
-The user's claimed profile handle (the identity behind cursor.com /@handle), without the @ prefix. Present only while the user's profile is publicly visible; omitted for users without a claimed handle and for non-public profiles.
-
-`actor.user.performedVia` object
-
-Set when an app (with an installation user token) or a service account, such as the user's personal Grok bot, acted on this user's behalf, for the action this field describes: on a comment's author it names what created the comment, not an actor that later edited or deleted it. Absent when the user acted directly; may be absent when delegation data is unavailable.
-
-`actor.user.performedVia.app` object
-
-The app that acted on the user's behalf.
-
-`actor.user.performedVia.app.id` string
-
-`actor.user.performedVia.app.displayName` string
-
-The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
-
-`actor.user.performedVia.serviceAccount` object
-
-The service account the user acted through, such as their personal Grok bot. As with `app`, the user is still the actor.
-
-`actor.user.performedVia.serviceAccount.id` string
-
-`actor.user.performedVia.serviceAccount.type` string
-
-Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
-
-`actor.user.performedVia.serviceAccount.displayName` string
-
-The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
-
-`actor.app` object
-
-`actor.app.id` string
-
-`actor.app.displayName` string
-
-The app's registered display name, never empty when present. Omitted when the app cannot be resolved.
-
-`actor.serviceAccount` object
-
-`actor.serviceAccount.id` string
-
-`actor.serviceAccount.type` string
-
-Which product or feature the account acts for. Unset when this API does not categorize the account or it no longer exists. New values may be added: decode with unknown enum values ignored, and treat an unset or unrecognized type as an unknown product, never as an error. One of `bugbot`, `automations`, `agent_serve`, `agent`, `grok_bot`, `env_builds`.
-
-`actor.serviceAccount.displayName` string
-
-The product name Cursor shows for the account, such as a Grok bot's name; never empty when present. A Grok bot whose name cannot be read is named "Grok Bot". Omitted when the account has no product name.
-
-`occurredAt` string
-
-When the write happened. RFC 3339 timestamp.
-
-**Sample `event.payload`:**
-
-```json
-{
-  "repository": {
-    "id": "repo_01k2ja2000e0080000000000q4",
-    "name": "rocket",
-    "owner": {
-      "slug": "acme",
-      "id": "ns_01k2ja2000e0080000000000p3",
-      "type": "team"
-    }
-  },
-  "ruleset": {
-    "id": "rs_01k2ja2000e0080000000000t7",
-    "name": "require-review",
-    "kind": "merge_branch",
-    "enforcement": "active",
-    "ruleTypes": [
-      "pull_request",
-      "require_status_checks"
-    ]
-  },
-  "actor": {
-    "user": {
-      "id": "user_01k2ja2000e0080000000000c3",
-      "email": "jane@acme.dev"
-    }
-  },
-  "occurredAt": "2026-08-03T09:15:00Z"
 }
 ```
 
