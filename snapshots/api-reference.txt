@@ -11332,7 +11332,7 @@ Enables auto-merge on a pull request: Origin merges it on your behalf once it's 
 
 The body can choose the merge method and the merge commit's title and message. An empty body lands with the default merge method and a commit message Origin composes. The response is the pull request with `autoMerge` set. Calling it while auto-merge is already on re-arms it for the caller with this call's options.
 
-A closed or merged pull request returns `FailedPrecondition` (HTTP 400). A draft pull request can be armed, and it merges only once it's ready for review. Retargeting the pull request with [Update Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#update-pull-request) keeps auto-merge on, and the merge lands on the base branch the pull request has then. Installation user tokens can't enable auto-merge: the request returns `PermissionDenied` (HTTP 403).
+A closed or merged pull request returns `FailedPrecondition` (HTTP 400). A draft pull request can be armed, and it merges only once it's ready for review. Retargeting the pull request with [Update Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#update-pull-request) keeps auto-merge on, and the merge lands on the base branch the pull request has then. Auto-merge never lands through a ruleset bypass: when the pull request can merge only because the principal that turned auto-merge on bypasses a rule, auto-merge waits until the rule passes. Installation user tokens and service accounts can't enable auto-merge: the request returns `PermissionDenied` (HTTP 403).
 
 Turn auto-merge off with [Disable Pull Request Auto Merge](https://cursor.com/docs/api/origin/llms-full.txt#disable-pull-request-auto-merge). Turning it on and off sends the [`pull_request.merge_when_ready.enabled`](https://cursor.com/docs/api/origin/llms-full.txt#events) and `pull_request.merge_when_ready.disabled` webhook events, and a merge it lands sends `pull_request.merged`.
 
@@ -11356,7 +11356,7 @@ Repository-local pull request number.
 
 `mergeMethod` string
 
-How the pull request lands. Allowed values: `merge`, which writes a merge commit, and `squash`, which writes a single squash commit. A method the repository doesn't allow, or that an `active` `pull_request` rule on the base branch leaves out of its `allowedMergeMethods`, is rejected with `FailedPrecondition` (HTTP 400), as [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) rejects it. Omit it to use the default among the methods both allow: a merge commit when allowed, otherwise a squash, and a squash when the base branch requires linear history.
+How the pull request lands. Allowed values: `merge`, which writes a merge commit, and `squash`, which writes a single squash commit. A method the repository doesn't allow, or that an `active` `pull_request` rule on the base branch leaves out of its `allowedMergeMethods`, is rejected with `FailedPrecondition` (HTTP 400), as [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) rejects it. `merge` is also rejected with `FailedPrecondition` (HTTP 400) when an `active` `required_linear_history` rule covers the base branch and squash merges are allowed there, because auto-merge lands without a ruleset bypass. Omit it to use the default among the methods both allow: a merge commit when allowed, otherwise a squash, and a squash when the base branch requires linear history.
 
 `commitTitle` string
 

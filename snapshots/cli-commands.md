@@ -2,7 +2,7 @@
 
 Origin is currently released in early beta. You can create repos, push and pull with git, mirror from GitHub, browse and search code, open and merge pull requests, and share with your Cursor team.
 
-Every `origin` command with its options, except pull requests, which have their own page: [Pull request commands](https://cursor.com/docs/origin/cli/reference/pull-requests.md). To see the same information in your terminal, run `origin --help` for the command list or `origin <group> --help` for one group. To install the CLI, see [Install the CLI](https://cursor.com/docs/origin/cli.md).
+Every `origin` command with its options, except pull requests and stacks, which have their own pages: [Pull request commands](https://cursor.com/docs/origin/cli/reference/pull-requests.md) and [Stack commands](https://cursor.com/docs/origin/cli/reference/stacks.md). To see the same information in your terminal, run `origin --help` for the command list or `origin <group> --help` for one group. To install the CLI, see [Install the CLI](https://cursor.com/docs/origin/cli.md).
 
 The Origin CLI (`origin`) is separate from the Cursor Agent CLI (`agent`) documented under [CLI](https://cursor.com/docs/cli/overview.md).
 
@@ -10,30 +10,35 @@ The Origin CLI (`origin`) is separate from the Cursor Agent CLI (`agent`) docume
 
 These work with any command:
 
-| Option      | Description                       |
-| ----------- | --------------------------------- |
-| `--version` | Show the installed version        |
-| `--help`    | Show help for the current command |
+| Option       | Description                       |
+| ------------ | --------------------------------- |
+| `--version`  | Show the installed version        |
+| `-h, --help` | Show help for the current command |
 
-The CLI reads the API endpoint and the bearer token from the environment, as `CURSOR_ORIGIN_ENDPOINT` and `CURSOR_AUTH_TOKEN`. See [Environment variables](https://cursor.com/docs/origin/cli/reference/commands.md#environment-variables).
+The CLI reads the API endpoint and credentials from the environment, as `CURSOR_ORIGIN_ENDPOINT`, `CURSOR_AUTH_TOKEN`, and `CURSOR_API_KEY`. See [Environment variables](https://cursor.com/docs/origin/cli/reference/commands.md#environment-variables).
 
 ## Command groups
 
-| Command                                                               | Description                                                                        | Usage                              |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
-| `auth`                                                                | Sign in, sign out, and configure git authentication                                | `origin auth login`                |
-| `repo`                                                                | Create, list, view, clone, and delete repositories                                 | `origin repo create my-project`    |
-| [`pr`](https://cursor.com/docs/origin/cli/reference/pull-requests.md) | Create, review, and merge pull requests                                            | `origin pr create`                 |
-| `ruleset`                                                             | View Origin rulesets (merge-time and push-time). Alias: `rs`                       | `origin ruleset list`              |
-| `ssh-key`                                                             | Manage SSH keys registered with your Origin account                                | `origin ssh-key list`              |
-| `api <endpoint>`                                                      | Make an authenticated request to the Origin REST API at `api.cursor.com/v1/origin` | `origin api /repos/{owner}/{repo}` |
-| `completion`                                                          | Print a bash or zsh tab-completion script                                          | `origin completion >> ~/.zshrc`    |
-| `update`                                                              | Update `origin` to the current release on your channel                             | `origin update`                    |
-| `config`                                                              | Manage configuration, including the release channel                                | `origin config get-channel`        |
+| Command                                                               | Description                                                                         | Usage                               |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------- |
+| `auth`                                                                | Sign in, sign out, and configure git authentication                                 | `origin auth login`                 |
+| `repo`                                                                | Create, view, edit, clone, mirror, and delete repositories, and manage their access | `origin repo create my-project`     |
+| [`pr`](https://cursor.com/docs/origin/cli/reference/pull-requests.md) | Create, review, and merge pull requests                                             | `origin pr create`                  |
+| [`stack`](https://cursor.com/docs/origin/cli/reference/stacks.md)     | View, restack, and push stacks of pull requests and their local branches            | `origin stack restack`              |
+| `label`                                                               | Manage the labels a repository defines                                              | `origin label list`                 |
+| `ruleset`                                                             | Manage Origin rulesets (merge-time and push-time). Alias: `rs`                      | `origin ruleset list`               |
+| `namespace`                                                           | Manage access to an Origin namespace. Alias: `ns`                                   | `origin namespace access list acme` |
+| `app`                                                                 | Manage Origin apps, their signing keys, and webhook deliveries                      | `origin app list`                   |
+| `ssh-key`                                                             | Manage SSH keys registered with your Origin account                                 | `origin ssh-key list`               |
+| `api <endpoint>`                                                      | Make an authenticated request to the Origin REST API at `api.cursor.com/v1/origin`  | `origin api /repos/{owner}/{repo}`  |
+| `agent`                                                               | Print a usage guide for AI agents, or install a skill that points agents to it      | `origin agent prompt`               |
+| `completion`                                                          | Set up bash or zsh tab completion                                                   | `origin completion >> ~/.zshrc`     |
+| `update`                                                              | Update `origin` to the current release on your channel                              | `origin update`                     |
+| `config`                                                              | Manage configuration, including the release channel                                 | `origin config get-channel`         |
 
 ## Targeting a repository
 
-Most commands infer the repository from the `origin` git remote in your current checkout. Override it with `-R, --repo` in `org/name` format:
+Most commands infer the repository from the `origin` git remote in your current checkout. Override it with `-R, --repo` in `org/name` format, or set `ORIGIN_REPO` for the whole shell. `-R` wins over `ORIGIN_REPO`, which wins over the git remote:
 
 ```bash
 origin pr list -R acme/checkout
@@ -48,6 +53,7 @@ Manage your session and the git credential helper.
 | `login`     | Sign in through the browser and configure git             | `origin auth login`     |
 | `setup-git` | Reconfigure the git credential helper for the Origin host | `origin auth setup-git` |
 | `status`    | Show the current authentication method and account        | `origin auth status`    |
+| `token`     | Print the token `origin` sends with requests              | `origin auth token`     |
 | `logout`    | Clear stored credentials                                  | `origin auth logout`    |
 
 | Command     | Option            | Description                                                                         |
@@ -57,6 +63,9 @@ Manage your session and the git credential helper.
 | `setup-git` | `--host <host>`   | Origin git host to configure (default: derived from `CURSOR_ORIGIN_ENDPOINT`)       |
 | `setup-git` | `--global`        | Apply to the global git config (default: `true`)                                    |
 | `setup-git` | `--local`         | Apply to this repository's git config instead of the global one                     |
+| `status`    | `--json <fields>` | Output JSON with the fields you list, for example `account,team,organization`       |
+
+The CLI uses the first credential it finds: `CURSOR_AUTH_TOKEN`, then `CURSOR_API_KEY`, then a login stored by `origin auth login`. `origin auth status` shows which one is in use. In CI, set `CURSOR_AUTH_TOKEN` or `CURSOR_API_KEY` instead of signing in.
 
 When `CURSOR_API_KEY` is set and you omit `--api-key`, `origin auth login` asks `Log in with this API key instead of the browser? [y/N]` and defaults to the browser flow. In a non-interactive shell, such as CI, it logs in with the key and prints a notice.
 
@@ -64,29 +73,98 @@ When `CURSOR_API_KEY` is set and you omit `--api-key`, `origin auth login` asks 
 
 ## Repositories
 
-| Subcommand                      | Description                                   | Usage                                       |
-| ------------------------------- | --------------------------------------------- | ------------------------------------------- |
-| `create <repo>`                 | Create a repository                           | `origin repo create acme/checkout`          |
-| `create-mirrored <github-repo>` | Create a Cursor mirror of a GitHub repository | `origin repo create-mirrored acme/checkout` |
-| `list`                          | List the repositories your account can access | `origin repo list`                          |
-| `view [repo]`                   | Display a repository                          | `origin repo view acme/checkout`            |
-| `clone <repo> [directory]`      | Clone over HTTPS using your saved login       | `origin repo clone acme/checkout`           |
-| `delete <repo>`                 | Delete a repository                           | `origin repo delete acme/checkout`          |
+| Subcommand                      | Description                                                                                                                             | Usage                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `create <repo>`                 | Create a repository                                                                                                                     | `origin repo create acme/checkout`           |
+| `create-mirrored <github-repo>` | Create a Cursor mirror of a GitHub repository                                                                                           | `origin repo create-mirrored acme/checkout`  |
+| `list`                          | List the repositories your account can access                                                                                           | `origin repo list`                           |
+| `view [repo]`                   | Display a repository                                                                                                                    | `origin repo view acme/checkout`             |
+| `edit [repo]`                   | Change repository settings                                                                                                              | `origin repo edit --visibility private`      |
+| `from-github [github-repo]`     | Show the Origin repository that mirrors a github.com repository                                                                         | `origin repo from-github acme/checkout`      |
+| `verify-migration [repo]`       | Compare a GitHub repository's settings with its Origin counterpart                                                                      | `origin repo verify-migration acme/checkout` |
+| `clone <repo> [directory]`      | Clone over HTTPS using your saved login                                                                                                 | `origin repo clone acme/checkout`            |
+| `delete <repo>`                 | Delete a repository                                                                                                                     | `origin repo delete acme/checkout`           |
+| `access`                        | Manage who can access a repository. See [Repository access](https://cursor.com/docs/origin/cli/reference/commands.md#repository-access) | `origin repo access list`                    |
+| `mirror`                        | Manage a repository's GitHub mirror. See [Mirrors](https://cursor.com/docs/origin/cli/reference/commands.md#mirrors)                    | `origin repo mirror status`                  |
 
 Pass `org/name` to target a repository. `origin repo create <name>` without a slash creates the repository in your account's namespace.
 
-| Command           | Option                          | Description                                                                |
-| ----------------- | ------------------------------- | -------------------------------------------------------------------------- |
-| `create`          | `--default-branch <branch>`     | Default branch for the new repository (server default: `main`)             |
-| `create-mirrored` | `--namespace <namespace>`       | Namespace to create the mirror under (default: your account's namespace)   |
-| `create-mirrored` | `--github-enterprise-id <uuid>` | GitHub Enterprise Server app UUID. Omit it when mirroring from github.com  |
-| `list`            | `--namespace <namespace>`       | List one namespace instead of every namespace you can access               |
-| `view`            | `--json <fields>`               | Output JSON with the fields you list, for example `org,name,defaultBranch` |
-| `delete`          | `-y, --yes`                     | Skip the confirmation prompt. Required in a non-interactive shell          |
+| Command            | Option                          | Description                                                                                   |
+| ------------------ | ------------------------------- | --------------------------------------------------------------------------------------------- |
+| `create`           | `--default-branch <branch>`     | Default branch for the new repository (server default: `main`)                                |
+| `create-mirrored`  | `--namespace <namespace>`       | Namespace to create the mirror under (default: your account's namespace)                      |
+| `create-mirrored`  | `--github-enterprise-id <uuid>` | GitHub Enterprise Server app UUID. Omit it when mirroring from github.com                     |
+| `list`             | `--namespace <namespace>`       | List one namespace instead of every namespace you can access                                  |
+| `list`             | `--json <fields>`               | Output JSON with the fields you list, for example `org,name,mirrorStatus`                     |
+| `view`             | `--json <fields>`               | Output JSON with the fields you list, for example `org,name,defaultBranch`                    |
+| `edit`             | `--default-branch <branch>`     | Set the default branch                                                                        |
+| `edit`             | `--visibility <visibility>`     | Set the visibility: `internal` or `private`                                                   |
+| `edit`             | `--allow-merge-commit`          | Allow merge commits. `--no-allow-merge-commit` disallows them                                 |
+| `edit`             | `--allow-squash-merge`          | Allow squash merges. `--no-allow-squash-merge` disallows them                                 |
+| `edit`             | `--delete-branch-on-merge`      | Delete the head branch when a pull request merges. `--no-delete-branch-on-merge` keeps it     |
+| `edit`             | `--json <fields>`               | Output JSON with the fields you list                                                          |
+| `from-github`      | `--json <fields>`               | Output JSON with the fields you list, for example `found,org,name,sourceOfTruth`              |
+| `verify-migration` | `--github-repo <owner/repo>`    | GitHub counterpart (default: resolved from the Origin repository's mirror info)               |
+| `verify-migration` | `--namespace <namespace>`       | Verify every repository in a namespace                                                        |
+| `verify-migration` | `--github-input <file>`         | Read captured GitHub settings from a JSON file instead of calling `gh api`. Use `-` for stdin |
+| `verify-migration` | `--json <fields>`               | Output JSON with the fields you list                                                          |
+| `delete`           | `-y, --yes`                     | Skip the confirmation prompt. Required in a non-interactive shell                             |
+
+`origin repo from-github` takes `owner/repo`, `HOST/OWNER/REPO`, or a URL. Without an argument, it reads the `origin` remote when that remote points at github.com.
+
+`origin repo view --json mirrorStatus` tells you which forge owns a repository. `no-mirror` and `outbound` mean Origin owns it. Any other value means GitHub does. See [Mirror a GitHub repo](https://cursor.com/docs/origin/mirror-github.md).
+
+## Repository access
+
+`origin repo access` manages who can reach a repository: the owning team's groups, team members, organization groups, and external collaborators.
+
+| Subcommand | Description                                                       | Usage                                                      |
+| ---------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| `list`     | List every access grant on the repository                         | `origin repo access list`                                  |
+| `set`      | Grant or change a role                                            | `origin repo access set --user dana@acme.com --role Write` |
+| `remove`   | Remove a direct grant                                             | `origin repo access remove --user dana@acme.com`           |
+| `policies` | List the roles you can grant, which are the valid `--role` values | `origin repo access policies`                              |
+
+`set` and `remove` take exactly one subject:
+
+| Option              | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `--team <group>`    | The owning team's `admins` or `members` group. On `remove`, clears the per-repository override |
+| `--user <user>`     | A team member, by numeric Cursor user ID or the email of an existing grantee                   |
+| `--group <group>`   | An organization group, by ID or the display name of an existing grantee                        |
+| `--external <user>` | An external collaborator, by numeric Cursor user ID or the email of an existing collaborator   |
+
+| Command | Option            | Description                                                                                                                       |
+| ------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `set`   | `--role <role>`   | Role to grant, by display name (`Read`, `Write`, `Admin`) or policy name (`ORIGIN_REPO_READ`). `none` removes the grant. Required |
+| `list`  | `--search <text>` | Filter grants and collaborators by name or email                                                                                  |
+| all     | `--json <fields>` | Output JSON with the fields you list                                                                                              |
+
+Removing a repository grant leaves namespace-level grants alone. To change those, use [`origin namespace access`](https://cursor.com/docs/origin/cli/reference/commands.md#namespaces).
+
+## Mirrors
+
+`origin repo mirror` manages a repository's [GitHub mirror](https://cursor.com/docs/origin/mirror-github.md).
+
+| Subcommand | Description                                                                  | Usage                                       |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------------- |
+| `status`   | Show the mirror status and any transition job                                | `origin repo mirror status`                 |
+| `sync`     | Fetch a ref from GitHub into an inbound mirror now                           | `origin repo mirror sync --ref main --wait` |
+| `detach`   | Permanently disconnect the repository from GitHub, so it becomes Origin-only | `origin repo mirror detach`                 |
+
+| Command  | Option            | Description                                                                    |
+| -------- | ----------------- | ------------------------------------------------------------------------------ |
+| `status` | `--job <id>`      | Show a specific transition job instead of the active one                       |
+| `status` | `--watch`         | Poll until the transition job succeeds, fails and rolls back, or is superseded |
+| `sync`   | `--ref <ref>`     | Branch name or full ref to sync (default: the default branch)                  |
+| `sync`   | `--wait`          | Block until the ref syncs or the server's wait budget runs out                 |
+| `sync`   | `--sha <sha>`     | Full commit SHA to wait for. Returns once it's reachable from the ref          |
+| `detach` | `-y, --yes`       | Skip the confirmation prompt                                                   |
+| all      | `--json <fields>` | Output JSON with the fields you list                                           |
 
 ## Push local
 
-On a repository [mirrored from GitHub](https://cursor.com/docs/origin/mirror-github.md), `origin push local` sets up the `origin-local` remote at `https://origin.cursor.com/{owner}/{repo}.git/local` and pushes local `origin/*` branches there. Use this to keep working when GitHub is unavailable, or to store any other git state you want only on the Origin copy. After the first run, that remote looks like:
+On a repository [mirrored from GitHub](https://cursor.com/docs/origin/mirror-github.md), `origin push local` sets up the `origin-local` remote at `https://origin.cursor.com/{owner}/{repo}.git/local` and pushes local `origin/*` branches there. Use this to keep working when GitHub is unavailable, or to store any other git state you want only on the Origin copy. It doesn't appear in `origin --help`. After the first run, that remote looks like:
 
 ```text
 origin-local    https://origin.cursor.com/{owner}/{repo}.git/local (fetch)
@@ -104,28 +182,164 @@ Other branches still go to GitHub with `git push origin`. See [forge-local branc
 | `--remote <name>` | Git remote to create or update (default: `origin-local`). Cannot be `origin` or `github` |
 | `--dry-run`       | Show what would be pushed without pushing                                                |
 
+## Labels
+
+Manage the labels a repository defines. Add them to pull requests with `origin pr create --label` or `origin pr edit --add-label`.
+
+| Subcommand       | Description                                      | Usage                                                                  |
+| ---------------- | ------------------------------------------------ | ---------------------------------------------------------------------- |
+| `list`           | List the repository's labels                     | `origin label list`                                                    |
+| `create <name>`  | Create a label                                   | `origin label create bug -c d73a4a`                                    |
+| `edit <label>`   | Change a label's name, color, or description     | `origin label edit bug -n defect`                                      |
+| `delete <name>`  | Delete a label                                   | `origin label delete defect`                                           |
+| `import <input>` | Import labels from a JSON file, or `-` for stdin | `gh label list --json name,color,description \| origin label import -` |
+
+| Command  | Option                     | Description                                                              |
+| -------- | -------------------------- | ------------------------------------------------------------------------ |
+| `list`   | `-S, --search <text>`      | Search label names                                                       |
+| `list`   | `-L, --limit <number>`     | Maximum number of labels to fetch (default: `30`)                        |
+| `create` | `-c, --color <hex>`        | Six-character hex color, with or without a leading `#` (default: random) |
+| `create` | `-d, --description <text>` | Label description                                                        |
+| `create` | `-f, --force`              | Update the color and description when the label already exists           |
+| `edit`   | `-n, --name <name>`        | New name                                                                 |
+| `edit`   | `-c, --color <hex>`        | New color                                                                |
+| `edit`   | `-d, --description <text>` | New description                                                          |
+| `delete` | `-y, --yes`                | Skip the confirmation prompt                                             |
+| `import` | `-f, --force`              | Update labels that already exist instead of skipping them                |
+| `import` | `--dry-run`                | Print what would be imported without writing anything                    |
+| all      | `--json <fields>`          | Output JSON with the fields you list                                     |
+
+`origin label import` reads the output of `gh label list --json name,color,description`, so you can copy a GitHub repository's labels in one step.
+
 ## Rulesets
 
-View the merge-time and push-time rulesets configured for a repository:
+Manage the merge-time and push-time [rulesets](https://cursor.com/docs/origin/settings.md#rules-and-protections) for a repository:
 
-| Subcommand          | Description                                               | Usage                      |
-| ------------------- | --------------------------------------------------------- | -------------------------- |
-| `list`              | List rulesets configured for a repository                 | `origin ruleset list`      |
-| `view <ruleset-id>` | View a ruleset by ID, as printed by `origin ruleset list` | `origin ruleset view <id>` |
+| Subcommand            | Description                                                             | Usage                                             |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| `list`                | List the repository's rulesets                                          | `origin ruleset list`                             |
+| `view <ruleset-id>`   | View a ruleset by ID, as printed by `origin ruleset list`. Alias: `get` | `origin ruleset view <id>`                        |
+| `create`              | Create a ruleset from flags or a JSON spec                              | `origin ruleset create --input ruleset.json`      |
+| `update <ruleset-id>` | Update a ruleset from flags or a JSON spec                              | `origin ruleset update <id> --enforcement active` |
+| `delete <ruleset-id>` | Delete a ruleset                                                        | `origin ruleset delete <id>`                      |
+| `import`              | Create rulesets from GitHub ruleset or branch-protection JSON           | `origin ruleset import --from-github rules.json`  |
+
+`create` and `update` take these options. Each repeatable option replaces the whole list:
+
+| Option                     | Description                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `--name <name>`            | Ruleset display name                                                                                                 |
+| `--description <text>`     | Ruleset description                                                                                                  |
+| `--enforcement <mode>`     | `active`, `evaluate`, or `disabled`                                                                                  |
+| `--kind <kind>`            | `merge_branch`, `push_branch`, `push_tag`, or `push_repository`                                                      |
+| `--included-ref <pattern>` | Ref pattern the ruleset applies to, such as `~DEFAULT_BRANCH` or `refs/heads/release/*`. Repeatable                  |
+| `--excluded-ref <pattern>` | Ref pattern to exclude. Repeatable                                                                                   |
+| `--rule <rule>`            | A rule as `<rule_type>[=<json parameters>]`, such as `'pull_request={"requiredApprovingReviewCount":1}'`. Repeatable |
+| `--bypass-actor <json>`    | A bypass actor as a JSON object with `bypassMode`, `actorKind`, and optional `actorPayload`. Repeatable              |
+| `--input <file>`           | JSON spec file, or `-` for stdin. Accepts `origin ruleset view --json` output. Flags override fields from the spec   |
+
+| Command  | Option                 | Description                                                                                                             |
+| -------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `import` | `--from-github <file>` | GitHub JSON: one ruleset, an array of rulesets, or classic branch protection. Use `--from-github=-` for stdin. Required |
+| `import` | `--branch <pattern>`   | Branch or pattern a classic branch-protection payload applies to. Required for that input                               |
+| `import` | `--enforcement <mode>` | Override enforcement on every imported ruleset, for example `evaluate` to trial them first                              |
+| `import` | `--dry-run`            | Print the rulesets that would be created without writing them                                                           |
+| `delete` | `-y, --yes`            | Skip the confirmation prompt                                                                                            |
+| all      | `--json <fields>`      | Output JSON with the fields you list                                                                                    |
+
+To copy a ruleset between repositories, save `origin ruleset view <id> --json name,enforcement,kind,includedRefNames,excludedRefNames,rules,bypassActors` to a file and pass it to `origin ruleset create --input` with `-R` set to the target repository.
+
+## Namespaces
+
+`origin namespace access` manages grants on a namespace, the `org` in `org/repo`. `origin ns` is an alias for `origin namespace`.
+
+| Subcommand             | Description                                                       | Usage                                                                |
+| ---------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `list <namespace>`     | List the team groups and individual grants                        | `origin namespace access list acme`                                  |
+| `set <namespace>`      | Grant a role to a team group, a user, or an organization group    | `origin namespace access set acme --user dana@acme.com --role Admin` |
+| `remove <namespace>`   | Remove a grant. Alias: `rm`                                       | `origin namespace access remove acme --user dana@acme.com`           |
+| `policies <namespace>` | List the roles you can grant, which are the valid `--role` values | `origin namespace access policies acme`                              |
+
+`set` and `remove` take exactly one of `--team <admins|members>`, `--user <user>` (a Cursor user ID, or the email of a user already granted on the namespace), or `--group <id>` (an organization group ID, as printed by `list`).
+
+| Command         | Option                | Description                                                                                                         |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `set`           | `--role <role>`       | Role to grant, by policy name (`ORIGIN_NAMESPACE_ADMIN`) or display name (`Admin`). Required                        |
+| `set`, `remove` | `--retain-self-admin` | When the change would remove the last Codebase Admin, keep you as admin through a personal grant instead of failing |
+| `remove`        | `-y, --yes`           | Skip the confirmation prompt                                                                                        |
+| `list`          | `--search <text>`     | Filter individual grants by name or email                                                                           |
+| all             | `--json <fields>`     | Output JSON with the fields you list                                                                                |
+
+## Apps
+
+`origin app` manages [Origin apps](https://cursor.com/docs/api/origin.md): their webhook subscriptions, signing keys, and webhook deliveries.
+
+| Subcommand                            | Description                                                     | Usage                                                       |
+| ------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------- |
+| `list`                                | List the apps a namespace publishes                             | `origin app list`                                           |
+| `view <app-id>`                       | View an app's configuration, stats, and signing keys            | `origin app view <app-id>`                                  |
+| `create`                              | Create an app in a namespace you administer                     | `origin app create --name ci-bot --generate-key ci-bot.pem` |
+| `edit <app-id>`                       | Edit an app. Options you omit leave fields unchanged            | `origin app edit <app-id> --event pull_request.merged`      |
+| `key add <app-id> <key-file>`         | Add an Ed25519 public key (PEM SPKI). Use `-` for stdin         | `origin app key add <app-id> key.pub`                       |
+| `key revoke <app-id> <kid>`           | Revoke a signing key by key ID, as printed by `origin app view` | `origin app key revoke <app-id> <kid>`                      |
+| `webhook deliveries`                  | List webhook deliveries and their outcomes                      | `origin app webhook deliveries --no-delivered`              |
+| `webhook redeliver <delivery-ids...>` | Queue deliveries to send again                                  | `origin app webhook redeliver <delivery-id>`                |
+| `webhook ping`                        | Send a signed test `ping` event and report the response         | `origin app webhook ping`                                   |
+
+| Command          | Option                    | Description                                                                                                    |
+| ---------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `list`           | `--namespace <namespace>` | Namespace whose apps to list (default: inferred from your account)                                             |
+| `list`           | `-L, --limit <number>`    | Maximum number of apps to list (default: `100`)                                                                |
+| `create`         | `--name <name>`           | App display name. Required                                                                                     |
+| `create`         | `--namespace <namespace>` | Owning namespace (default: inferred from your account)                                                         |
+| `create`         | `--public-key <file>`     | Ed25519 public key (PEM SPKI) for the app signing key. Use `-` for stdin                                       |
+| `create`         | `--generate-key <path>`   | Generate an Ed25519 key pair, write the private key (PKCS#8 PEM) to this path, and register the public key     |
+| `create`, `edit` | `--webhook-url <url>`     | HTTPS URL that receives webhook events. On `edit`, `""` clears the webhook configuration                       |
+| `create`, `edit` | `--event <event>`         | Webhook event subscription, such as `pull_request.created`. Repeatable. On `edit`, replaces the list           |
+| `create`, `edit` | `--redirect-uri <uri>`    | Allowed OAuth install callback (absolute HTTPS URI). Repeatable. On `edit`, replaces the list                  |
+| `create`, `edit` | `--default-scope <scope>` | Default scope the app declares, such as `repository:contents:read`. Repeatable. On `edit`, replaces the list   |
+| `create`, `edit` | `--description <text>`    | Short app description. On `edit`, `""` clears it                                                               |
+| `create`, `edit` | `--website-url <url>`     | Publisher website (absolute HTTPS URL). On `edit`, `""` clears it                                              |
+| `edit`           | `--name <name>`           | New display name                                                                                               |
+| `edit`           | `--clear-events`          | Remove every event subscription                                                                                |
+| `edit`           | `--clear-redirect-uris`   | Remove every install callback                                                                                  |
+| `edit`           | `--clear-default-scopes`  | Remove every default scope                                                                                     |
+| `webhook *`      | `--app <app-id>`          | App to authenticate as. Requires `--signing-key`                                                               |
+| `webhook *`      | `--signing-key <file>`    | The app's private signing key (Ed25519 PKCS#8 PEM)                                                             |
+| `deliveries`     | `--delivered`             | Only deliveries the receiver acknowledged. `--no-delivered` lists every delivery that never got a 2xx response |
+| `deliveries`     | `--event-type <event>`    | Only this event type, such as `pull_request.created`                                                           |
+| `deliveries`     | `--installation <id>`     | Only this installation                                                                                         |
+| `deliveries`     | `-L, --limit <number>`    | Maximum number of deliveries to list (default: `30`)                                                           |
+| all except `key` | `--json <fields>`         | Output JSON with the fields you list                                                                           |
+
+Redelivery is asynchronous. Run `origin app webhook deliveries` afterward to see the outcome.
 
 ## SSH keys
 
 Manage the SSH public keys on your Origin account:
 
-| Subcommand       | Description                                                                        | Usage                                                     |
-| ---------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `add [key-file]` | Add an SSH public key to your account. `-t, --title` is required and names the key | `origin ssh-key add ~/.ssh/id_ed25519.pub -t work-laptop` |
-| `list`           | List the SSH public keys on your account (`--json` for JSON)                       | `origin ssh-key list`                                     |
-| `delete <id>`    | Delete a key by ID, as printed by `origin ssh-key list`                            | `origin ssh-key delete <id>`                              |
+| Subcommand       | Description                                                                                                                 | Usage                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `add [key-file]` | Add an SSH public key to your account. `-t, --title` is required and names the key. Omit the file or pass `-` to read stdin | `origin ssh-key add ~/.ssh/id_ed25519.pub -t work-laptop` |
+| `list`           | List the SSH public keys on your account (`--json <fields>` for JSON)                                                       | `origin ssh-key list`                                     |
+| `delete <id>`    | Delete a key by ID, as printed by `origin ssh-key list`. `-y, --yes` skips the prompt                                       | `origin ssh-key delete <id>`                              |
 
 ## API requests
 
-`origin api` makes an authenticated request to the Origin REST API at `api.cursor.com/v1/origin` for anything without a first-class command. It supports request flags similar to `gh api`: `-X, --method`, `-H, --header`, `-F, --field`, `-f, --raw-field`, and `--input`. To filter the JSON response, pipe it to `jq`. `{owner}`, `{repo}`, and `{branch}` placeholders expand from `-R, --repo`, the `ORIGIN_REPO` environment variable, or the `origin` git remote. See the [Origin API](https://cursor.com/docs/api/origin.md) docs for endpoints, authentication, and examples.
+`origin api` makes an authenticated request to the Origin REST API at `api.cursor.com/v1/origin` for anything without a first-class command. It supports request flags similar to `gh api`: `-X, --method`, `-H, --header`, `-F, --field`, `-f, --raw-field`, and `--input`. `--verbose` prints the request and response headers to stderr, and `--silent` drops the response body. To filter the JSON response, pipe it to `jq`. `{owner}`, `{repo}`, and `{branch}` placeholders expand from `-R, --repo`, the `ORIGIN_REPO` environment variable, or the `origin` git remote. See the [Origin API](https://cursor.com/docs/api/origin.md) docs for endpoints, authentication, and examples.
+
+## Agents
+
+`origin agent prompt` prints a Markdown guide to `origin` for AI agents, written for the installed version. `origin agent prompt <topic>` prints one topic: `auth`, `prs`, `review`, `ci`, `stacking`, `json`, or `reference`. `origin agent prompt reference pr` lists every command in one group.
+
+`origin agent setup` installs a skill that tells your coding agent to run `origin agent prompt`:
+
+| Option              | Description                                                            |
+| ------------------- | ---------------------------------------------------------------------- |
+| `--harness <agent>` | Agent to install the skill for: `cursor`, `claude-code`, or `codex`    |
+| `--global`          | Install in your home directory, for every project (default: `true`)    |
+| `--project`         | Install in the current project instead (`cursor` and `claude-code`)    |
+| `--print`           | Print the skill instead of writing it, to install it for another agent |
 
 ## Updates
 
@@ -134,6 +348,8 @@ Update to the current release on your channel:
 ```bash
 origin update
 ```
+
+`--force` reinstalls even when you're already on the current version.
 
 The CLI updates from the `stable` channel by default. Switch with `origin config set-channel <latest|stable>` and check with `origin config get-channel`.
 
@@ -149,13 +365,13 @@ Branch-valued flags such as `--head` and `--base` then complete local branch nam
 
 ## Environment variables
 
-| Variable                 | Description                                                                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `CURSOR_API_KEY`         | API key for `origin auth login`. An interactive shell asks before using it instead of the browser; a non-interactive shell uses it |
-| `CURSOR_AUTH_TOKEN`      | Cursor auth token, used directly as a bearer token                                                                                 |
-| `CURSOR_ORIGIN_ENDPOINT` | API server endpoint (default: `https://api.origin.cursor.com`)                                                                     |
-| `ORIGIN_REPO`            | Default repository in `org/name` format for `origin api` when there is no `origin` remote                                          |
-| `NO_COLOR`               | Turn off colored output                                                                                                            |
+| Variable                 | Description                                                                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CURSOR_AUTH_TOKEN`      | Cursor auth token, used directly as a bearer token. Takes precedence over every other credential                                                            |
+| `CURSOR_API_KEY`         | API key, exchanged for a session and never stored. Used when `CURSOR_AUTH_TOKEN` is unset. `origin auth login` asks before using it in an interactive shell |
+| `CURSOR_ORIGIN_ENDPOINT` | API server endpoint (default: `https://api.origin.cursor.com`)                                                                                              |
+| `ORIGIN_REPO`            | Default repository in `org/name` format when you omit `-R, --repo`                                                                                          |
+| `NO_COLOR`               | Turn off colored output                                                                                                                                     |
 
 ## Getting help
 
@@ -170,6 +386,7 @@ origin repo create --help
 ## Next steps
 
 - [Pull request commands](https://cursor.com/docs/origin/cli/reference/pull-requests.md)
+- [Stack commands](https://cursor.com/docs/origin/cli/reference/stacks.md)
 - [Install the CLI](https://cursor.com/docs/origin/cli.md)
 - [Create a repository](https://cursor.com/docs/origin/create-repository.md)
 - [Clone, Push & Pull](https://cursor.com/docs/origin/git.md)
