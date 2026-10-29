@@ -2010,14 +2010,18 @@ paths:
             tags:
                 - OriginService
             description: |-
-                Turns enforcement of the namespace's inbound IP allowlist on or off and
-                 returns the allowlist. While enforced and at least one entry is enabled,
-                 git over SSH and HTTPS, the API, and file downloads on the namespace's
-                 repositories accept requests only from listed addresses. Enabling a list
+                Turns enforcement of the namespace's inbound IP allowlist on or off, or
+                 changes whether it trusts app-declared IPs, and returns the allowlist.
+                 A request must set at least one of the two; one that sets neither is
+                 rejected with INVALID_ARGUMENT. While enforced and at least one entry is
+                 enabled, git over SSH and HTTPS, the API, and file downloads on the
+                 namespace's repositories accept requests only from listed addresses, and
+                 from app-declared IPs when the list trusts them. Enabling a list
                  that excludes the caller's own address is rejected with
                  INVALID_ARGUMENT; a caller the enforced list already excludes is
                  rejected with PERMISSION_DENIED. Setting the current value succeeds
-                 without change.
+                 without change. When a request sets both, the trust setting is saved
+                 first and stays saved if enabling is then rejected.
             operationId: OriginService_UpdateInboundIpAllowlist
             parameters:
                 - name: namespaceSlug
@@ -2030,15 +2034,21 @@ paths:
                 content:
                     application/json:
                         schema:
-                            required:
-                                - enabled
                             type: object
                             properties:
                                 enabled:
                                     type: boolean
                                     description: |-
                                         True to enforce the namespace's inbound IP allowlist, false to stop
-                                         enforcing it.
+                                         enforcing it. Unset leaves enforcement as it is; it then requires
+                                         `trust_app_declared_ips`.
+                                trustAppDeclaredIps:
+                                    type: boolean
+                                    description: |-
+                                        True to also allow the egress IPs that installed apps declare, false to
+                                         stop. Unset leaves the setting as it is. Setting it while app-declared
+                                         IPs are unavailable is rejected with FAILED_PRECONDITION.
+                                    x-cursor-visibility: PREVIEW
                         examples:
                             updateInboundIpAllowlist:
                                 value:
@@ -15528,9 +15538,9 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/Repo'
                     description: |-
-                        The repo to create. Only `name` (required) and `default_branch` (optional;
-                         defaults to "main" when omitted) are honored on input; OUTPUT_ONLY fields
-                         are ignored.
+                        The repo to create. Only `name` (required), `default_branch` (optional;
+                         defaults to "main" when omitted), and `visibility` (optional; defaults to
+                         `internal`) are honored on input; OUTPUT_ONLY fields are ignored.
         CreateRulesetRequest:
             required:
                 - identifier
@@ -16410,6 +16420,13 @@ components:
                          removed, or edited; turning enforcement on or off does not change it.
                          Pass it to `ReplaceInboundIpAllowlistEntries` to replace only this
                          version of the list.
+                trustAppDeclaredIps:
+                    type: boolean
+                    description: |-
+                        Whether addresses that apps installed on the namespace declare as their
+                         egress IPs are also allowed while the list is enforced. Reads as false
+                         while the app-declared IP feature is turned off for Origin.
+                    x-cursor-visibility: PREVIEW
             description: |-
                 A namespace's inbound IP allowlist: the addresses allowed to reach the
                  namespace's repositories while enforcement is on.
@@ -19749,7 +19766,6 @@ components:
                         Mirror metadata. Absent for a native repository and before a mirror's
                          initial sync is ready.
                 visibility:
-                    readOnly: true
                     enum:
                         - internal
                         - private
@@ -21100,7 +21116,6 @@ components:
         UpdateInboundIpAllowlistRequest:
             required:
                 - namespaceSlug
-                - enabled
             type: object
             properties:
                 namespaceSlug:
@@ -21110,7 +21125,15 @@ components:
                     type: boolean
                     description: |-
                         True to enforce the namespace's inbound IP allowlist, false to stop
-                         enforcing it.
+                         enforcing it. Unset leaves enforcement as it is; it then requires
+                         `trust_app_declared_ips`.
+                trustAppDeclaredIps:
+                    type: boolean
+                    description: |-
+                        True to also allow the egress IPs that installed apps declare, false to
+                         stop. Unset leaves the setting as it is. Setting it while app-declared
+                         IPs are unavailable is rejected with FAILED_PRECONDITION.
+                    x-cursor-visibility: PREVIEW
         UpdateLabelRequest:
             required:
                 - identifier

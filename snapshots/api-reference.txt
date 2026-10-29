@@ -2894,6 +2894,10 @@ The repo name, unique to its owner. Required on create.
 
 Default branch name. Always set on responses. On create, omitting this field or leaving it empty defaults to "main".
 
+`visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`. On create, omitting this field defaults to `internal`.
+
 #### Response Fields
 
 `id` string
@@ -16279,11 +16283,11 @@ Type-specific parameters as a JSON object. The shape depends on `rules[].ruleTyp
 
 `rules[].parameters.requiredApprovingReviewCount` integer
 
-For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1.
+For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1. A user's approval counts only while the user has permission to [submit reviews](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-review) on the repository.
 
 `rules[].parameters.requireCodeOwnerReview` boolean
 
-For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. Defaults to `false`.
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. Defaults to `false`.
 
 `rules[].parameters.dismissStaleReviewsOnPush` boolean
 
@@ -16303,7 +16307,7 @@ For `pull_request` rules: the merge methods a pull request can land with on a ta
 
 `rules[].parameters.requiredReviewers` array
 
-For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
+For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else, or from a member without permission to submit reviews on the repository, doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
 
 `rules[].parameters.requiredReviewers[].group` object
 
@@ -16721,11 +16725,11 @@ Type-specific parameters as a JSON object. The shape depends on `rules[].ruleTyp
 
 `rules[].parameters.requiredApprovingReviewCount` integer
 
-For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1.
+For `pull_request` rules: how many approving reviews the pull request needs, from 0 to 50. Defaults to 1. A user's approval counts only while the user has permission to [submit reviews](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-review) on the repository.
 
 `rules[].parameters.requireCodeOwnerReview` boolean
 
-For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. Defaults to `false`.
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. Defaults to `false`.
 
 `rules[].parameters.dismissStaleReviewsOnPush` boolean
 
@@ -16745,7 +16749,7 @@ For `pull_request` rules: the merge methods a pull request can land with on a ta
 
 `rules[].parameters.requiredReviewers` array
 
-For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
+For `pull_request` rules: Cursor organization groups whose members must approve, in addition to `requiredApprovingReviewCount`. Each entry names a group of an organization linked to the team that owns the repository's namespace, whether the organization or one of its teams owns the group, and how many of its members must approve; an approval from anyone else, or from a member without permission to submit reviews on the repository, doesn't count toward it. A group can be listed once, and at most 20 groups per rule. When a save adds a group the repository can't require, because the group doesn't exist, belongs to an organization that isn't linked to that team, has no members, or has fewer members than `minimumApprovals`, it's rejected with `InvalidArgument` (HTTP 400). A listed group that stops resolving later blocks every merge the rule covers until the rule is fixed.
 
 `rules[].parameters.requiredReviewers[].group` object
 
