@@ -1931,8 +1931,8 @@ paths:
             description: |-
                 Returns the namespace's inbound IP allowlist: whether it is enforced and
                  every entry, oldest first. Not paginated: a namespace lists at most 1000
-                 entries. Allowlists are available on team namespaces that have the
-                 feature enabled; other namespaces are rejected with FAILED_PRECONDITION.
+                 entries. Only team namespaces have an allowlist; any other namespace is
+                 rejected with FAILED_PRECONDITION.
                  Requires the `namespace:settings:read` scope.
             operationId: OriginService_GetInboundIpAllowlist
             parameters:
@@ -2013,11 +2013,19 @@ paths:
                 Turns enforcement of the namespace's inbound IP allowlist on or off, or
                  changes whether it trusts app-declared IPs, and returns the allowlist.
                  A request must set at least one of the two; one that sets neither is
-                 rejected with INVALID_ARGUMENT. While enforced and at least one entry is
-                 enabled, git over SSH and HTTPS, the API, and file downloads on the
-                 namespace's repositories accept requests only from listed addresses, and
-                 from app-declared IPs when the list trusts them. Enabling a list
-                 that excludes the caller's own address is rejected with
+                 rejected with INVALID_ARGUMENT.
+
+                 While enforced and at least one entry is enabled, Origin refuses requests
+                 from addresses no enabled entry covers. This applies to git over SSH and
+                 HTTPS, the API, MCP, and file downloads, for requests from the team's
+                 members and for requests from other people to the namespace and its
+                 repositories. A refused API request fails with PERMISSION_DENIED (HTTP
+                 403), as does one whose address Origin cannot determine. Requests from
+                 Cursor's own services, such as cloud agents on Cursor's network, aren't
+                 checked against this list. A change can take up to a minute to apply to
+                 every request.
+
+                 Enabling a list that excludes the caller's own address is rejected with
                  INVALID_ARGUMENT; a caller the enforced list already excludes is
                  rejected with PERMISSION_DENIED. Setting the current value succeeds
                  without change. When a request sets both, the trust setting is saved
@@ -2045,10 +2053,10 @@ paths:
                                 trustAppDeclaredIps:
                                     type: boolean
                                     description: |-
-                                        True to also allow the egress IPs that installed apps declare, false to
-                                         stop. Unset leaves the setting as it is. Setting it while app-declared
-                                         IPs are unavailable is rejected with FAILED_PRECONDITION.
-                                    x-cursor-visibility: PREVIEW
+                                        True to also admit app installation tokens from their apps' declared
+                                         egress IP ranges (see `InboundIpAllowlist.trust_app_declared_ips`), false
+                                         to stop. Covers every app installed on the namespace, including apps
+                                         installed later. Unset leaves the setting as it is.
                         examples:
                             updateInboundIpAllowlist:
                                 value:
@@ -2122,8 +2130,9 @@ paths:
                  spelling the namespace already lists is rejected with ALREADY_EXISTS. A
                  spelling that does not parse, a range covering an entire address space
                  (`/0`), or a list already holding 1000 entries is rejected with
-                 INVALID_ARGUMENT. While the list is enforced, a caller whose own address
-                 it excludes is rejected with PERMISSION_DENIED.
+                 INVALID_ARGUMENT, as is an entry that would make an enforced list exclude
+                 the caller's own address. While the list is enforced, a caller whose own
+                 address it excludes is rejected with PERMISSION_DENIED.
             operationId: OriginService_AddInboundIpAllowlistEntry
             parameters:
                 - name: namespaceSlug
@@ -16423,13 +16432,13 @@ components:
                 trustAppDeclaredIps:
                     type: boolean
                     description: |-
-                        Whether addresses that apps installed on the namespace declare as their
-                         egress IPs are also allowed while the list is enforced. Reads as false
-                         while the app-declared IP feature is turned off for Origin.
-                    x-cursor-visibility: PREVIEW
+                        Whether the list also admits an app installation token calling from an
+                         egress IP range its app declares, for apps installed on this namespace.
+                         Applies to this namespace's own list only, not to file downloads, and
+                         never to other credentials.
             description: |-
-                A namespace's inbound IP allowlist: the addresses allowed to reach the
-                 namespace's repositories while enforcement is on.
+                A namespace's inbound IP allowlist: the addresses Origin accepts requests
+                 from while the list is enforced.
         InboundIpAllowlistEntry:
             type: object
             properties:
@@ -20148,6 +20157,47 @@ components:
                 owner:
                     $ref: '#/components/schemas/Owner'
             description: Stable identity and display coordinates for a repository.
+        RepositoryRenamedWebhookPayload:
+            type: object
+            properties:
+                repository:
+                    allOf:
+                        - $ref: '#/components/schemas/RepositoryReference'
+                    description: |-
+                        The repository after the rename. Key stored state on `id`: it is the
+                         only identifier a rename does not change.
+                previousName:
+                    type: string
+                    description: The name the repository had before the rename. The owner is unchanged.
+                actor:
+                    allOf:
+                        - $ref: '#/components/schemas/OriginActor'
+                    description: The principal that renamed the repository, when known.
+                renamedAt:
+                    type: string
+                    description: When the rename committed.
+                    format: date-time
+            description: |-
+                A repository's name changed within its owner namespace. The previous name
+                 keeps resolving to this repository (Git, API and web URLs) until another
+                 repository takes that name: one created under it, renamed onto it, or
+                 published under it.
+            x-origin-webhook-events:
+                - repository.renamed
+            example:
+                repository:
+                    id: repo_01k2ja2000e0080000000000q4
+                    name: launchpad
+                    owner:
+                        slug: acme
+                        id: ns_01k2ja2000e0080000000000p3
+                        type: team
+                previousName: rocket
+                actor:
+                    user:
+                        id: user_01k2ja2000e0080000000000c3
+                        email: jane@acme.dev
+                renamedAt: "2026-08-02T14:05:00Z"
         RequestPullRequestReviewersRequest:
             required:
                 - identifier
@@ -20349,14 +20399,14 @@ components:
                     items:
                         $ref: '#/components/schemas/RulesetRule'
                     description: |-
-                        Protection rules in this ruleset. Create/update reject more than 20
+                        Protection rules in this ruleset. Create/update reject more than 50
                          entries; list/get therefore never paginate this field.
                 bypassActors:
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetBypassActor'
                     description: |-
-                        Bypass principals for this ruleset. Create/update reject more than 15
+                        Bypass principals for this ruleset. Create/update reject more than 100
                          entries; list/get therefore never paginate this field.
             description: |-
                 A named bundle of branch, merge, and push protections for one repository.
@@ -20971,7 +21021,7 @@ components:
                     items:
                         $ref: '#/components/schemas/GoogleProtobufAny'
                     description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
-            description: 'The canonical error envelope, after google.rpc.Status: a code, a developer-facing message, and typed details — google.rpc.BadRequest field violations for invalid arguments, and a google.rpc.RequestInfo entry echoing the caller-supplied request id. New detail types may appear at any time, so integrations must tolerate unknown entries. 404 responses never distinguish a resource that does not exist from one the caller cannot access; not-found and no-access are deliberately indistinguishable.'
+            description: 'The canonical error envelope, after google.rpc.Status: a code, a developer-facing message, and typed details — google.rpc.BadRequest field violations for invalid arguments, and a google.rpc.RequestInfo entry echoing the caller-supplied request id. New detail types may appear at any time, so integrations must tolerate unknown entries. 404 responses never distinguish a resource that does not exist from one the caller cannot access; not-found and no-access are deliberately indistinguishable. A 403 can also mean a team''s inbound IP allowlist refused the request''s address; its message says so.'
         SyncMirrorRequest:
             required:
                 - identifier
@@ -21130,10 +21180,10 @@ components:
                 trustAppDeclaredIps:
                     type: boolean
                     description: |-
-                        True to also allow the egress IPs that installed apps declare, false to
-                         stop. Unset leaves the setting as it is. Setting it while app-declared
-                         IPs are unavailable is rejected with FAILED_PRECONDITION.
-                    x-cursor-visibility: PREVIEW
+                        True to also admit app installation tokens from their apps' declared
+                         egress IP ranges (see `InboundIpAllowlist.trust_app_declared_ips`), false
+                         to stop. Covers every app installed on the namespace, including apps
+                         installed later. Unset leaves the setting as it is.
         UpdateLabelRequest:
             required:
                 - identifier
