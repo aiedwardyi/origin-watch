@@ -18171,7 +18171,7 @@ components:
             description: |-
                 A fixed group of the team that owns a repository or an owner: every team
                  member or every team admin. These are the owning team's default access
-                 shelves, granted on the resource itself; a repository's team-group grant is
+                 grant targets, granted on the resource itself; a repository's team-group grant is
                  distinct from the one inherited from its owner.
         OriginUserActor:
             required:
@@ -19827,7 +19827,7 @@ components:
                     type: string
                     description: |-
                         Combined from all of the user's grants on this repository: direct,
-                         owner-level, group, owning-team, and Internal-shelf. It can differ from
+                         owner-level, group, owning-team, and all-internal-repos. It can differ from
                          the `permission` of any single grant in ListRepositoryGrants.
             description: A user with access to a repository through one or more grants.
         RepositoryCreatedWebhookPayload:
