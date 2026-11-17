@@ -10,7 +10,7 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 
 - [Full reference (Markdown)](https://cursor.com/docs/api/origin/llms-full.txt): The complete Origin API reference as a single Markdown file.
 - [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml): Machine-readable OpenAPI 3.1 spec with request and response schemas.
-- [Origin Migration API](https://cursor.com/docs/api/origin/migrations.md): Endpoints for migrating repositories between GitHub and Origin mirrors, called with a user access token.
+- [Origin Migration API](https://cursor.com/docs/api/origin/migrations.md): Endpoints for migrating repositories between GitHub and Origin mirrors, called with a Cursor user credential.
 
 ## Guides
 
@@ -238,6 +238,7 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Repository Label Events](https://cursor.com/docs/api/origin/reference/repository-label-events.md)
 - [Repository Label Updated](https://cursor.com/docs/api/origin/reference/repository-label-updated.md)
 - [Pull Request Events](https://cursor.com/docs/api/origin/reference/pull-request-events.md)
+- [Pull Request Commandeered](https://cursor.com/docs/api/origin/reference/pull-request-commandeered.md)
 - [Pull Request Auto Merge Enabled](https://cursor.com/docs/api/origin/reference/pull-request-auto-merge-enabled.md)
 - [Pull Request Auto Merge Disabled](https://cursor.com/docs/api/origin/reference/pull-request-auto-merge-disabled.md)
 - [Pull Request Label Events](https://cursor.com/docs/api/origin/reference/pull-request-label-events.md)
@@ -253,4 +254,3 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Installation Suspended](https://cursor.com/docs/api/origin/reference/installation-suspended.md)
 - [Installation Unsuspended](https://cursor.com/docs/api/origin/reference/installation-unsuspended.md)
 - [Installation Deleted](https://cursor.com/docs/api/origin/reference/installation-deleted.md)
-- [Pull Request Commandeered](https://cursor.com/docs/api/origin/reference/pull-request-commandeered.md)
