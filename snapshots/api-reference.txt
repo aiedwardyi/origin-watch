@@ -579,7 +579,7 @@ Only a running run, `in_progress` or `failing`, expires. Once its `deadlineAt` h
 
 ## Endpoint reference
 
-Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and each operation lists the response codes that operation can return, plus a request and response example. Every operation also carries an `x-origin-scopes` extension: `scopes` holds the scope the operation requires, and `tokenTypes` holds the credential kinds it accepts. Each webhook payload schema carries an `x-origin-webhook-events` extension listing the [events](https://cursor.com/docs/api/origin/llms-full.txt#event-payloads) that deliver it, and [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview) surface carries `x-cursor-visibility: PREVIEW`. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`. Every operation carries a unique `operationId`; where one operation answers two URL shapes, the second shape's id takes a `_2` suffix, as in `OriginService_GetRepoTarball_2`.
+Download the [OpenAPI specification](https://cursor.com/docs/api/origin/openapi.yaml) for the complete component schemas. The document declares `https://api.cursor.com` as its server and a `bearerAuth` HTTP bearer security scheme, and each operation lists the response codes that operation can return, plus a request and response example. Every operation also carries an `x-origin-scopes` extension: `scopes` holds the scope the operation requires, and `tokenTypes` holds the credential kinds it accepts, the same ones its **Auth** badges show. The kinds are `app` for an app JWT, `installation` for an installation access token, `installation_as_user` for an installation user token, and `user` for a Cursor user credential. Each webhook payload schema carries an `x-origin-webhook-events` extension listing the [events](https://cursor.com/docs/api/origin/llms-full.txt#event-payloads) that deliver it, and [preview](https://cursor.com/docs/api/origin/llms-full.txt#preview) surface carries `x-cursor-visibility: PREVIEW`. Path parameters carry the same names the URLs use, `ownerSlug` and `repoName`. Every operation carries a unique `operationId`; where one operation answers two URL shapes, the second shape's id takes a `_2` suffix, as in `OriginService_GetRepoTarball_2`.
 
 The JSON snippets show schema-shaped placeholder values. Response field descriptions reflect the OpenAPI schema and current platform contract.
 
@@ -591,7 +591,7 @@ GET
 
 `/v1/origin/rate_limit`
 
-Requires no scope (app JWT or installation access token or Cursor user credential).
+Requires no scope (app JWT or installation access token or installation user token or Cursor user credential).
 
 Returns the authenticated principal's current public API rate limit status.
 
@@ -1300,6 +1300,160 @@ curl --request GET \
 }
 ```
 
+### List Installation User Repositories
+
+GET
+
+`/v1/origin/user/installations/{installationId}/repos`
+
+Requires scope `repository:metadata:read` (installation user token).
+
+Lists the repositories that an installation user token can read.
+
+A repository is listed when the acting user can read it, the installation can read it, and the token's `repositoryIds`, when set, include it. The acting user needs no namespace-wide permission: a repository shared directly with the user is listed.
+
+Requires an installation user token minted by [Create Installation User Token](https://cursor.com/docs/api/origin/llms-full.txt#create-installation-user-token) for `installationId`. The token's `scopes`, when set, must include `repository:metadata:read`. Any other credential, and a token without that scope, returns `PermissionDenied` (HTTP 403). An `installationId` other than the token's own installation returns `404`.
+
+The call returns `PermissionDenied` (HTTP 403) when the acting user, or the installation, can read no repository in the installation's namespace. Otherwise, when no repository meets all three conditions, the list is empty.
+
+Repositories are ordered by `id`, so the order doesn't change when a repository is renamed. No total count is returned.
+
+#### Path Parameters
+
+`installationId` string Required
+
+The installation the token was minted for.
+
+#### Query Parameters
+
+`pageSize` integer
+
+Max repositories to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
+
+`pageToken` string
+
+Opaque cursor from a previous response's `nextPageToken`. Empty for the first page. The same filter must be used when requesting subsequent pages. `pageSize` on a follow-up request applies to that page; omit it to keep the previous page size.
+
+`filter` string
+
+Optional case-insensitive substring filter applied to repository names and owner namespaces. A single-slash `owner/repo` value matches each half against its corresponding field. Leading and trailing whitespace is ignored; an empty value applies no filter.
+
+#### Response Fields
+
+`repositories` array
+
+Repositories the token can read, as sparse summaries; use [Get Repo](https://cursor.com/docs/api/origin/llms-full.txt#get-repo) for full timestamps.
+
+`repositories[].id` string
+
+Origin repository identifier.
+
+`repositories[].name` string
+
+Repository name within its owner.
+
+`repositories[].fullName` string
+
+Combined owner and repository name, such as acme/api.
+
+`repositories[].owner` object
+
+Owner reference for the repository.
+
+`repositories[].owner.slug` string
+
+URL-facing owner slug used with the owner ID to identify the repository owner.
+
+`repositories[].owner.id` string
+
+Origin owner identifier.
+
+`repositories[].owner.type` string
+
+Owner namespace type. Output-only. Allowed values: `team`, `user`. Omitted when unknown.
+
+`repositories[].defaultBranch` string
+
+Repository default branch name.
+
+`repositories[].pushedAt` string
+
+RFC 3339 timestamp of the most recent push to any branch. Absent until the first push.
+
+`repositories[].cloneUrl` string
+
+Output-only HTTPS URL for cloning the repository.
+
+`repositories[].mirror` object
+
+Mirror metadata. Absent for a native repository and before a mirror's initial sync is ready.
+
+`repositories[].mirror.source` string
+
+Mirror source. Allowed value: `github`.
+
+`repositories[].mirror.sourceId` string
+
+Opaque repository identifier assigned by the source.
+
+`repositories[].mirror.status` string
+
+Effective mirror direction during a transition, until cutover completes. Allowed values: `inbound`.
+
+`repositories[].visibility` string
+
+Repository visibility. Allowed values: `internal`, `private`.
+
+`repositories[].allowMergeCommit` boolean
+
+Whether pull requests can land as merge commits.
+
+`repositories[].allowSquashMerge` boolean
+
+Whether pull requests can land as squash merges.
+
+`repositories[].deleteBranchOnMerge` boolean
+
+Whether the head branch is deleted automatically on merge.
+
+`repositories[].webUrl` string
+
+Output-only web URL for this repository on Cursor. Absent when Origin can't form a link for it.
+
+`nextPageToken` string
+
+Opaque cursor for the next page; empty when there are no more pages.
+
+```bash
+curl --request GET \
+  --url 'https://api.cursor.com/v1/origin/user/installations/INSTALLATION_ID/repos' \
+  --header 'Authorization: Bearer YOUR_INSTALLATION_USER_TOKEN'
+```
+
+**Response shape:**
+
+```json
+{
+  "repositories": [
+    {
+      "id": "repo_01k2ja2000e0080000000000q4",
+      "name": "rocket",
+      "fullName": "acme/rocket",
+      "webUrl": "https://cursor.com/codebase/acme/rocket",
+      "owner": {
+        "slug": "acme",
+        "id": "ns_01k2ja2000e0080000000000p3",
+        "type": "team"
+      },
+      "defaultBranch": "main",
+      "pushedAt": "2026-08-02T14:45:00Z",
+      "cloneUrl": "https://origin.cursor.com/git/acme/rocket.git"
+    }
+  ],
+  "nextPageToken": ""
+}
+```
+
 ### List Webhook Deliveries
 
 GET
@@ -1336,7 +1490,7 @@ Bound the delivery's creation time. For browsing, not for recovery.
 
 `pageSize` integer
 
-Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
+Max deliveries to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -2525,7 +2679,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}`
 
-Requires scope `repository:metadata:read` (installation access token or Cursor user credential).
+Requires scope `repository:metadata:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single repo by its `(owner_id, name)` identifier.
 
@@ -2698,11 +2852,11 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}`
 
-Requires scope `repository:settings:write` (installation access token or Cursor user credential).
+Requires scope `repository:settings:write` (installation access token or installation user token or Cursor user credential).
 
 Updates repository settings. Omitted fields are left unchanged, and at least one settable field must be provided.
 
-Settings apply as independent groups in a fixed order: default branch, automatic head-branch deletion, visibility, then merge methods. The update is not atomic across groups. When a group is rejected, the groups before it in that order are already applied and stay applied, so retry with the rejected group corrected to converge on the state you asked for. The response carries the repository as of the last group applied.
+Settings apply as independent groups in a fixed order: default branch, automatic head-branch deletion, visibility, merge methods, then name. The update is not atomic across groups. When a group is rejected, the groups before it in that order are already applied and stay applied, so retry with the rejected group corrected to converge on the state you asked for. The response carries the repository as of the last group applied.
 
 A request that sets no field returns `InvalidArgument` (HTTP 400). A concurrent change to the default branch returns `409 Conflict`.
 
@@ -2732,11 +2886,15 @@ Whether pull requests can land as squash merges. Must be sent together with `all
 
 `deleteBranchOnMerge` boolean
 
-Whether the head branch is deleted automatically on merge. Supported only on repositories whose pull requests live on this API; a repository that pulls from an upstream source returns `FailedPrecondition` (HTTP 400).
+Whether the head branch is deleted automatically on merge. Accepted in every mirror state. On a repository that pulls from an upstream source, the value is stored and takes effect once Origin becomes the repository's source of truth. A mirror transition doesn't change it.
 
 `visibility` string
 
 New repository visibility. Allowed values: `internal`, `private`. Omit it to leave the visibility unchanged.
+
+`name` string
+
+New repository name within the same owner, under the naming rules of [Create Repo](https://cursor.com/docs/api/origin/llms-full.txt#create-repo). The previous name keeps resolving to this repository for Git and API requests, and web links to it redirect to the new name. No other repository can take the previous name, but this repository can rename back to it. A name another repository in the owner holds, live or as a previous name, returns `AlreadyExists` (HTTP 409 Conflict), and an empty name returns `InvalidArgument` (HTTP 400). Supported only on repositories whose source of truth is Origin; others, such as a repository mirrored from GitHub, return `FailedPrecondition` (HTTP 400). A rename delivers [`repository.renamed`](https://cursor.com/docs/api/origin/llms-full.txt#events).
 
 #### Response Fields
 
@@ -2869,7 +3027,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}`
 
-Requires scope `namespace:repositories:create` (installation access token or Cursor user credential).
+Requires scope `namespace:repositories:create` (installation access token or installation user token or Cursor user credential).
 
 Creates a repo belonging to an owner.
 
@@ -3025,7 +3183,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/branches`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the repo's branches and tip commits in ascending name order, paginated with `page_size` and `page_token`.
 
@@ -3098,7 +3256,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/collaborators/{userId}/permission`
 
-Requires scope `repository:members:read` (installation access token or Cursor user credential).
+Requires scope `repository:members:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a user's permission on a repository, combined from their direct and inherited grants. The result describes the user's grants and does not depend on the credential you call with. Only repositories whose source of truth is Origin are supported. A user whose grants give no access, an ID that names no active account, a mirrored repository, and a repository that does not exist or is not visible to you all return the same `404`.
 
@@ -3167,7 +3325,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/tarball/{ref}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Downloads a gzip-compressed tar of the repository tree at `ref`.
 
@@ -3222,7 +3380,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}:syncMirror`
 
-Requires scope `repository:mirror:sync` (installation access token or Cursor user credential).
+Requires scope `repository:mirror:sync` (installation access token or installation user token or Cursor user credential).
 
 Synchronizes one ref of a mirrored repository from its upstream source. Returns HTTP `200` when the sync target is satisfied, or HTTP `202` when the sync is still pending. `wait=false` (the default) schedules the sync and usually returns `202`; it returns `200` immediately when `sha` is already reachable from `ref`. `wait=true` blocks until satisfied or the wait budget (\~2 minutes) expires; expiry still returns `202` and the sync continues in the background. Repositories that do not pull from an upstream source are rejected.
 
@@ -4425,7 +4583,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/check-runs/{checkRunId}`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single check run by server-assigned id (`cr_...`).
 
@@ -4676,7 +4834,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/check-runs/{checkRunId}/annotations`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Lists a check run's annotations in ascending ID order.
 
@@ -4997,7 +5155,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/check-runs/{checkRunId}/rerequest`
 
-Requires scope `repository:contents:write` (installation access token or Cursor user credential).
+Requires scope `repository:contents:write` (installation access token or installation user token or Cursor user credential).
 
 Asks the app that reported a check run to run it again. Origin records the request on the run as `rerequestedAt` and notifies the owning app with [`repository.check_run.rerequested`](https://cursor.com/docs/api/origin/llms-full.txt#events). The app answers by posting a fresh run for the same head SHA and `key`, either a new run or an update of this one, which clears `rerequestedAt` and stores the posted status. While the request is outstanding the run's `status` is `rerequested`; its `conclusion` and timings keep describing the superseded attempt. The call returns the run with `rerequestedAt` set and `status` `rerequested`.
 
@@ -5265,7 +5423,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/check-suites/{checkSuiteId}`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Returns check suite metadata by server-assigned id (`crg_...`). Does not embed check runs; use `ListCheckRunsForSuite` for the suite's runs.
 
@@ -5443,7 +5601,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/check-suites/{checkSuiteId}/check-runs`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Lists a suite's current check runs. When a run key was reported more than once in the suite, only the latest attempt for that key is returned; superseded attempts are omitted. [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run) defines which attempt is the latest. A run that has been re-requested stays in the listing and reads as pending, with `status` `rerequested` and `rerequestedAt` set, and its superseded `conclusion` and timings unchanged, until the app that owns it answers. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Paginated.
 
@@ -5716,7 +5874,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/commits/{sha}/check-runs`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Lists a commit's current check runs across all suites: only runs belonging to each suite's latest attempt, and within each suite only the latest attempt per run key. Superseded attempts are omitted; [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run) defines which attempt is the latest. A run that has been re-requested stays in the listing and reads as pending, with `status` `rerequested` and `rerequestedAt` set, and its superseded `conclusion` and timings unchanged, until the app that owns it answers. Read a superseded attempt by its own id with [Get Check Run](https://cursor.com/docs/api/origin/llms-full.txt#get-check-run). Optionally filtered by check name and status. Paginated.
 
@@ -5999,7 +6157,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/commits/{sha}/check-suites`
 
-Requires scope `repository:checks:read` (installation access token or Cursor user credential).
+Requires scope `repository:checks:read` (installation access token or installation user token or Cursor user credential).
 
 Lists check suites reported against a commit. Returns only the latest attempt of each suite, per reporting actor and suite key; superseded attempts are omitted, and [Post Check Run](https://cursor.com/docs/api/origin/llms-full.txt#post-check-run) defines which attempt is the latest. Read a superseded attempt by its own id with [Get Check Suite](https://cursor.com/docs/api/origin/llms-full.txt#get-check-suite). Returns suite metadata only (no embedded runs). Paginated.
 
@@ -6205,7 +6363,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/commits`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists commits on a branch or starting ref.
 
@@ -6233,7 +6391,7 @@ Max commits to return. Defaults to 30 when unset or 0. Values above 100 are clam
 
 `pageToken` string
 
-Opaque cursor from a previous response's `nextPageToken`. Empty for the first page. Encodes the starting ref, walk position, and email, time, and path filters; `sha`, `pageSize`, `authorEmails`, `committerEmails`, `since`, `until`, and `path` are ignored when a token is supplied. A filtered page can contain fewer than `pageSize` commits while `nextPageToken` is set, and comes back empty with a token only after 100,000 scanned commits held no match. Keep paging until `nextPageToken` is empty.
+Opaque cursor from a previous response's `nextPageToken`. Empty for the first page. Encodes the commit the listing started from, the walk position, and the email, time, and path filters; `sha`, `pageSize`, `authorEmails`, `committerEmails`, `since`, `until`, and `path` are ignored when a token is supplied. That commit is the full SHA `sha` resolved to on the first page, so later pages keep walking from it even if the branch or tag has moved since. A filtered page can contain fewer than `pageSize` commits while `nextPageToken` is set, and comes back empty with a token only after 100,000 scanned commits held no match. Keep paging until `nextPageToken` is empty.
 
 `authorEmails` array
 
@@ -6380,7 +6538,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/commits/{sha}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single commit by SHA or ref with whole-commit aggregate `stats`. It does not include changed files; use [List Commit Files](https://cursor.com/docs/api/origin/llms-full.txt#list-commit-files).
 
@@ -6529,7 +6687,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/commits/{sha}/files`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the files changed by a commit.
 
@@ -6626,7 +6784,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/compare/{basehead}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Compares commits, refs, or tags relative to their merge base. `basehead` is `"{base}...{head}"`; refs containing "/" must use their SHA.
 
@@ -6976,7 +7134,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/compare/{basehead}/files`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the files changed by a comparison: the diff of `head` against the merge base of `base` and `head`.
 
@@ -7073,7 +7231,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/contents`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns file or directory contents at a ref. The file path is passed as the `path` query parameter (supports nested paths); omit or leave empty for the repository root directory. Files larger than 1 MiB (decoded) are rejected with `FailedPrecondition` (HTTP 400).
 
@@ -7159,7 +7317,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/contents:batchGet`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns the contents of several explicit paths at a ref in one request. Each requested path yields a result marking whether it was found; a found path carries the same `Content` shape as `GetContents` (files as base64, directories as immediate `entries`, symlinks as files). Paths are matched exactly, with no globs or patterns, and at most 20 may be requested; duplicates are removed. Response results preserve first-seen request order. A single file larger than the [Get Contents](https://cursor.com/docs/api/origin/llms-full.txt#get-contents) 1 MiB cap fails the whole batch with `FailedPrecondition` (HTTP 400). Uses POST because the path list travels in the request body.
 
@@ -7279,7 +7437,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}:grep`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Searches the text of the files in the repository at a ref and returns the lines that match, plus any requested surrounding context lines. The search is line-oriented: a pattern never matches across a line break, and each returned entry is one line. The repository is scanned for every request, so there is no pagination and no cursor; the response is complete only when `limitHit` is false. An empty repository with no refs returns no matches and `limitHit` false. Uses POST because the search parameters travel in the request body.
 
@@ -7436,7 +7594,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/blobs/{sha}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a Git blob object by SHA. Default response is JSON with MIME-wrapped base64 `content`. Pass `Accept: application/vnd.origin.raw+json` (or `application/vnd.origin.raw`) on the REST surface to receive raw blob bytes instead. Blobs larger than 4 MiB (decoded) are rejected; fetch larger files by cloning the repository over [Git HTTPS](https://cursor.com/docs/api/origin/llms-full.txt#git-https-authentication). Empty repositories return 409 Conflict.
 
@@ -7495,7 +7653,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/commits/{sha}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a Git commit object by SHA (or resolvable revision). This is the low-level Git Database commit shape (flat author/message/tree), not the higher-level `GetCommit` resource under `/commits/{sha}`. `sha` accepts a commit SHA, branch, tag, or symbolic ref such as `HEAD`. Empty repositories return 409 Conflict.
 
@@ -7610,7 +7768,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/commits:createFromFiles`
 
-Requires scope `repository:contents:write` (installation access token or Cursor user credential).
+Requires scope `repository:contents:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a commit on a branch from inline file changes and advances the branch to it.
 
@@ -7753,7 +7911,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/ref/{ref}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single Git reference by name. `ref` is typically `heads/<branch>` or `tags/<tag>` (with or without a leading `refs/`), or the symbolic `HEAD`. Exact match only; use ListMatchingGitRefs for prefixes. Empty repositories return 409 Conflict.
 
@@ -7817,7 +7975,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/refs`
 
-Requires scope `repository:contents:write` (installation access token or Cursor user credential).
+Requires scope `repository:contents:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a branch reference pointing at an existing commit.
 
@@ -7890,7 +8048,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/refs/{ref}`
 
-Requires scope `repository:contents:write` (installation access token or Cursor user credential).
+Requires scope `repository:contents:write` (installation access token or installation user token or Cursor user credential).
 
 Deletes a branch reference. The response body is empty.
 
@@ -7932,7 +8090,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/matching-refs`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists Git references whose names start with the given prefix. REST responses unwrap to a JSON array (via `response_body`). A trailing slash on `ref` is preserved (`heads/` → `refs/heads/`). The symbolic `HEAD` is matched exactly (it is not under `refs/`). Empty repositories return 409 Conflict.
 
@@ -8000,7 +8158,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/matching-refs/{ref}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Lists Git references whose names start with the given prefix. REST responses unwrap to a JSON array (via `response_body`). A trailing slash on `ref` is preserved (`heads/` → `refs/heads/`). The symbolic `HEAD` is matched exactly (it is not under `refs/`). Empty repositories return 409 Conflict.
 
@@ -8066,7 +8224,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/tags/{sha}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns an annotated Git tag object by SHA. Lightweight tags are not tag objects and return NotFound. Empty repositories return 409 Conflict.
 
@@ -8157,7 +8315,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/git/trees/{sha}`
 
-Requires scope `repository:contents:read` (installation access token or Cursor user credential).
+Requires scope `repository:contents:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a Git tree object by SHA or resolvable revision. `sha` accepts a tree SHA, commit SHA, branch, tag, or symbolic ref such as `HEAD`. Set `recursive=true` (or `1`) to walk the whole tree; omitting the parameter or passing any other value lists immediate children only. Recursive listings truncate at 100,000 entries or 7 MiB and set `truncated=true`. Empty repositories return 409 Conflict.
 
@@ -8249,7 +8407,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/grants`
 
-Requires scope `repository:settings:read` (installation access token or Cursor user credential).
+Requires scope `repository:settings:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the users, groups, and owning-team groups holding a permission granted directly on a repository. Permissions inherited from the repository's owner are not included.
 
@@ -8383,7 +8541,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/grants`
 
-Requires scope `repository:settings:write` (installation access token or Cursor user credential).
+Requires scope `repository:settings:write` (installation access token or installation user token or Cursor user credential).
 
 Sets the permission a user, group, or owning-team group holds directly on a repository, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. A user must be an active member of the repository owner's team or organization. A group must be one the owner's team owns, or an active group in that team's organization; otherwise the request returns `FailedPrecondition` (HTTP 400).
 
@@ -8512,7 +8670,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/grants`
 
-Requires scope `repository:settings:write` (installation access token or Cursor user credential).
+Requires scope `repository:settings:write` (installation access token or installation user token or Cursor user credential).
 
 Removes the permission a user, group, or owning-team group holds directly on a repository. Permissions inherited from the repository's owner are unaffected, so an owning-team group falls back to its owner-level default. Removing a permission the principal does not hold directly succeeds without change. The response body is empty.
 
@@ -8592,7 +8750,7 @@ GET
 
 `/v1/origin/namespaces/{namespaceSlug}/grants`
 
-Requires scope `namespace:settings:read` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:read` (installation access token or installation user token or Cursor user credential).
 
 Lists who has been granted access to an owner: users, groups, and the owning team's built-in admin and member groups. Each grant carries the permission it confers on every repository under the owner. Grants made on individual repositories are not included; read those with [List Repository Grants](https://cursor.com/docs/api/origin/llms-full.txt#list-repository-grants).
 
@@ -8709,7 +8867,7 @@ POST
 
 `/v1/origin/namespaces/{namespaceSlug}/grants`
 
-Requires scope `namespace:settings:write` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:write` (installation access token or installation user token or Cursor user credential).
 
 Sets the permission a user, group, or owning-team group holds directly on an owner, replacing any permission granted directly to that principal before. Repeating a grant the principal already holds succeeds without change. The request returns `FailedPrecondition` (HTTP 400) when the user is not an active member of the owning team or its organization, when the group is neither owned by that team nor an active group in its organization, or when the write would leave the owner without an admin.
 
@@ -8834,7 +8992,7 @@ DELETE
 
 `/v1/origin/namespaces/{namespaceSlug}/grants`
 
-Requires scope `namespace:settings:write` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:write` (installation access token or installation user token or Cursor user credential).
 
 Removes the permission a user, group, or owning-team group holds directly on an owner. Per-repository grants are unaffected. Removing a permission the principal does not hold directly succeeds without change, and a removal that would leave the owner without an admin returns `FailedPrecondition` (HTTP 400). The response body is empty.
 
@@ -8924,7 +9082,7 @@ GET
 
 `/v1/origin/namespaces/{namespaceSlug}/inbound-ip-allowlist`
 
-Requires scope `namespace:settings:read` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:read` (installation access token or installation user token or Cursor user credential).
 
 Returns the namespace's inbound IP allowlist: whether it is enforced and every entry, oldest first. The response is not paginated; a namespace lists at most 1,000 entries. Only team namespaces have an allowlist; any other namespace returns `FailedPrecondition` (HTTP 400).
 
@@ -9184,7 +9342,7 @@ GET
 
 `/v1/origin/namespaces/{namespaceSlug}/inbound-ip-allowlist/entries/{entryId}`
 
-Requires scope `namespace:settings:read` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:read` (installation access token or installation user token or Cursor user credential).
 
 Returns one inbound IP allowlist entry by its ID. An ID the namespace does not list returns `404`.
 
@@ -9498,7 +9656,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/labels`
 
-Requires scope `repository:labels:read` (installation access token or Cursor user credential).
+Requires scope `repository:labels:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the labels defined on a repository, ordered by name.
 
@@ -9518,7 +9676,7 @@ Repo name, unique to the owner entity.
 
 `pageSize` integer
 
-Maximum labels to return. Defaults to 30 when omitted or zero; values above 100 are clamped to 100.
+Maximum labels to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -9577,7 +9735,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/labels`
 
-Requires scope `repository:labels:write` (installation access token or Cursor user credential).
+Requires scope `repository:labels:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a label on a repository.
 
@@ -9654,7 +9812,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/labels/{labelName}`
 
-Requires scope `repository:labels:read` (installation access token or Cursor user credential).
+Requires scope `repository:labels:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single repository label by name.
 
@@ -9715,7 +9873,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/labels/{labelName}`
 
-Requires scope `repository:labels:write` (installation access token or Cursor user credential).
+Requires scope `repository:labels:write` (installation access token or installation user token or Cursor user credential).
 
 Deletes a repository label by name. The response body is empty.
 
@@ -9757,7 +9915,7 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/labels/{labelName}`
 
-Requires scope `repository:labels:write` (installation access token or Cursor user credential).
+Requires scope `repository:labels:write` (installation access token or installation user token or Cursor user credential).
 
 Updates a repository label identified by its current name.
 
@@ -9852,7 +10010,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Lists pull requests in a repo, optionally filtered by head branch, head commit, merge commit, base branch, author, creation-time range, merge-time range, stack, labels, and state. Each pull request includes its assigned labels and, when it belongs to a stack, its `stack` membership.
 
@@ -9880,7 +10038,7 @@ Lifecycle filter. Allowed values: `open` (the default), `closed`, `merged`, `all
 
 `pageSize` integer
 
-Maximum results to return. Defaults to 30; maximum 100.
+Maximum results to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -10268,7 +10426,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single pull request, including its assigned labels.
 
@@ -10613,7 +10771,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a pull request from `head` into `base`.
 
@@ -10981,7 +11139,7 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Updates a pull request's title, body, base branch, stack parent, and/or lifecycle state.
 
@@ -11719,7 +11877,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/auto_merge`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Turns auto-merge off on a pull request and returns the pull request with `autoMerge` unset.
 
@@ -12047,7 +12205,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/comments`
 
-Requires scope `repository:pull_requests:reviews:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:read` (installation access token or installation user token or Cursor user credential).
 
 Lists every comment on a pull request in chronological order, optionally bounded to a creation-time window. Each comment carries its full thread: id, diff anchor, and resolution state. Group the flat response by `thread.id` without a second request.
 
@@ -12069,7 +12227,7 @@ Repo name, unique to the owner entity.
 
 `pageSize` integer
 
-Maximum comments to return. Defaults to 30; maximum 100.
+Maximum comments to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -12355,7 +12513,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/comments/{commentId}`
 
-Requires scope `repository:pull_requests:reviews:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single pull request comment by its stable Origin id. A comment outside the authorized repository, or a pending-review comment not visible to the caller, returns `404`.
 
@@ -12574,7 +12732,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/comments/{commentId}`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Deletes a pull request comment by its stable Origin id. The response body is empty.
 
@@ -12616,7 +12774,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/comments`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a comment on an Origin pull request. The comment targets exactly one of four things: `threadId` replies to an existing thread, general-discussion and inline alike; `inline` opens a new thread anchored to a line range in the pull request version's diff; `file` opens a new thread on a whole file in that diff; supplying none of them opens a new general-discussion thread. Bodies longer than 65,536 characters are rejected with `InvalidArgument` (HTTP 400).
 
@@ -12864,7 +13022,7 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/comments/{commentId}`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Updates a pull request comment by its stable Origin id.
 
@@ -13095,7 +13253,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/comments/{commentId}/reactions`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Adds the caller's reaction to a pull request comment. The response body is empty.
 
@@ -13147,7 +13305,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/comments/{commentId}/reactions/{emoji}`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Removes the caller's reaction from a pull request comment. The response body is empty.
 
@@ -13193,7 +13351,7 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/threads/{threadId}`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Resolves or reopens a pull request comment thread and returns the thread's updated state. Resolving an already-resolved thread, or reopening an already-open one, is a no-op.
 
@@ -13305,7 +13463,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/commits`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the commits in a pull request.
 
@@ -13458,7 +13616,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/files`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the files changed in a pull request.
 
@@ -13553,7 +13711,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Lists every label assigned to a pull request, ordered by name.
 
@@ -13620,7 +13778,7 @@ PUT
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Replaces every label assigned to a pull request with the labels you name.
 
@@ -13691,7 +13849,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Adds labels to a pull request.
 
@@ -13762,7 +13920,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Removes every label from a pull request.
 
@@ -13802,7 +13960,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/labels/{labelName}`
 
-Requires scope `repository:pull_requests:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:write` (installation access token or installation user token or Cursor user credential).
 
 Removes one label from a pull request.
 
@@ -13857,7 +14015,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/merge`
 
-Requires scope `repository:contents:write` (installation access token or Cursor user credential).
+Requires scope `repository:contents:write` (installation access token or installation user token or Cursor user credential).
 
 Merges a pull request into its base.
 
@@ -14229,7 +14387,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/merge_ref`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Brings a pull request's test merge up to date with the current tip of its base branch.
 
@@ -14306,7 +14464,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/mergeability`
 
-Requires scope `repository:pull_requests:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:read` (installation access token or installation user token or Cursor user credential).
 
 Returns whether the pull request can be merged and, when it cannot, the conditions that block it. The verdict is evaluated against the same conditions [Merge Pull Request](https://cursor.com/docs/api/origin/llms-full.txt#merge-pull-request) enforces, so a `mergeable` verdict means a merge of the same head is expected to succeed. For a stacked pull request the verdict covers every pull request from the stack root through this one, and each blocker names the pull request it belongs to.
 
@@ -14442,11 +14600,15 @@ Owner sets that still need an approval.
 
 `blockers[].codeownerApproval.requirements[].owners` array
 
-Code owners, any one of whom can satisfy the requirement.
+Code owners, any one of whom can satisfy the requirement, as CODEOWNERS names them. When `anyHuman` is set, they resolve only to the author and the author's own bots, and none of their approvals count.
 
 `blockers[].codeownerApproval.requirements[].paths` array
 
 Changed paths this owner set covers.
+
+`blockers[].codeownerApproval.requirements[].anyHuman` boolean
+
+Whether any reviewer other than the author can approve. Present only when `true`.
 
 `blockers[].mergeConflict` object
 
@@ -14607,7 +14769,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/requested_reviewers`
 
-Requires scope `repository:pull_requests:reviews:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the users, groups, and service accounts whose review is currently requested on a pull request.
 
@@ -14716,7 +14878,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/requested_reviewers`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Requests reviews from the given users, groups, and service accounts on a pull request, and returns the reviewers this call requested.
 
@@ -14863,7 +15025,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/requested_reviewers`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Removes requested reviews from the given users, groups, and service accounts on a pull request. The response body is empty.
 
@@ -14953,7 +15115,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/reviews`
 
-Requires scope `repository:pull_requests:reviews:read` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:read` (installation access token or installation user token or Cursor user credential).
 
 Lists submitted reviews on a pull request, ordered by `submitted_at` ascending. Pending reviews are omitted.
 
@@ -14973,7 +15135,7 @@ Repo name, unique to the owner entity.
 
 `pageSize` integer
 
-Maximum reviews to return. Defaults to 30; maximum 100.
+Maximum reviews to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -15228,7 +15390,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/reviews`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Creates and submits a review on a pull request, optionally together with its comments in one atomic request. Each comment takes the same targets [Create Pull Request Comment](https://cursor.com/docs/api/origin/llms-full.txt#create-pull-request-comment) takes: `comments[].inline` for a line range, `comments[].file` for a whole file, `comments[].threadId` for a reply, and none of them for general discussion.
 
@@ -15494,7 +15656,7 @@ PATCH
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/reviews/{reviewId}`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Updates the body of a review. Only the review author can update it; other callers receive PERMISSION\_DENIED. A review that does not belong to the named pull request returns NOT\_FOUND.
 
@@ -15708,7 +15870,7 @@ PUT
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/pulls/{pullNumber}/reviews/{reviewId}/dismissals`
 
-Requires scope `repository:pull_requests:reviews:write` (installation access token or Cursor user credential).
+Requires scope `repository:pull_requests:reviews:write` (installation access token or installation user token or Cursor user credential).
 
 Dismisses a submitted review so its verdict no longer counts toward the pull request's review state. The review itself is retained and keeps appearing in ListPullRequestReviews, with `dismissal` set.
 
@@ -15964,7 +16126,7 @@ Optional repository, as `ownerSlug/repoName`, searched when `q` names no `repo:`
 
 `pageSize` integer
 
-Maximum results to return. Defaults to 30; maximum 100.
+Maximum results to return. Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
 
 `pageToken` string
 
@@ -16064,7 +16226,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/rulesets`
 
-Requires scope `repository:rulesets:read` (installation access token or Cursor user credential).
+Requires scope `repository:rulesets:read` (installation access token or installation user token or Cursor user credential).
 
 Lists every ruleset configured on a repository.
 
@@ -16252,7 +16414,7 @@ POST
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/rulesets`
 
-Requires scope `repository:rulesets:write` (installation access token or Cursor user credential).
+Requires scope `repository:rulesets:write` (installation access token or installation user token or Cursor user credential).
 
 Creates a repository ruleset.
 
@@ -16288,11 +16450,11 @@ The operation the ruleset protects. Allowed values: `merge_branch`, `push_branch
 
 `includedRefNames` array
 
-Ref name patterns this ruleset includes. Supports globs and the tokens `~ALL` and `~DEFAULT_BRANCH`. Values above 64 entries are rejected with `InvalidArgument` (HTTP 400).
+Ref name patterns this ruleset includes. Supports globs and the tokens `~ALL` and `~DEFAULT_BRANCH`. Values above 64 entries are rejected with `InvalidArgument` (HTTP 400). A `push_repository` ruleset applies to every push and takes no patterns, so any pattern on one, `~ALL` included, is rejected the same way.
 
 `excludedRefNames` array
 
-Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap as `includedRefNames`.
+Ref name patterns this ruleset excludes. Same pattern language, 64-entry cap, and `push_repository` rule as `includedRefNames`.
 
 `rules` array
 
@@ -16312,7 +16474,7 @@ For `pull_request` rules: how many approving reviews the pull request needs, fro
 
 `rules[].parameters.requireCodeOwnerReview` boolean
 
-For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. Defaults to `false`.
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. When a path's owners resolve only to the pull request's author, who can't approve their own pull request, any approval that counts toward `requiredApprovingReviewCount` satisfies that path. Defaults to `false`.
 
 `rules[].parameters.dismissStaleReviewsOnPush` boolean
 
@@ -16543,7 +16705,7 @@ GET
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/rulesets/{rulesetId}`
 
-Requires scope `repository:rulesets:read` (installation access token or Cursor user credential).
+Requires scope `repository:rulesets:read` (installation access token or installation user token or Cursor user credential).
 
 Returns a single repository ruleset by its stable Origin ID.
 
@@ -16690,11 +16852,11 @@ PUT
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/rulesets/{rulesetId}`
 
-Requires scope `repository:rulesets:write` (installation access token or Cursor user credential).
+Requires scope `repository:rulesets:write` (installation access token or installation user token or Cursor user credential).
 
 Updates an existing repository ruleset.
 
-The request replaces the whole ruleset configuration. `rules` and `bypassActors` are replaced in full rather than merged, and Origin assigns new IDs to the stored entries, so send every rule and bypass actor you want to keep.
+The request replaces the whole ruleset configuration. `rules` and `bypassActors` are replaced in full rather than merged, and Origin assigns new IDs to the stored entries, so send every rule and bypass actor you want to keep. A request that matches what the ruleset already stores changes nothing: the response returns the stored ruleset, and its rules and bypass actors keep their IDs.
 
 #### Path Parameters
 
@@ -16730,11 +16892,11 @@ The operation the ruleset protects. Allowed values: `merge_branch`, `push_branch
 
 `includedRefNames` array
 
-Ref name patterns this ruleset includes. Supports globs and the tokens `~ALL` and `~DEFAULT_BRANCH`. Values above 64 entries are rejected with `InvalidArgument` (HTTP 400).
+Ref name patterns this ruleset includes. Supports globs and the tokens `~ALL` and `~DEFAULT_BRANCH`. Values above 64 entries are rejected with `InvalidArgument` (HTTP 400). A `push_repository` ruleset applies to every push and takes no patterns: a pattern, `~ALL` included, is rejected the same way unless the ruleset already is a `push_repository` ruleset that stores it in this list, so you can send its stored patterns back or remove them.
 
 `excludedRefNames` array
 
-Ref name patterns this ruleset excludes. Same pattern language and 64-entry cap as `includedRefNames`.
+Ref name patterns this ruleset excludes. Same pattern language, 64-entry cap, and `push_repository` rule as `includedRefNames`.
 
 `rules` array
 
@@ -16754,7 +16916,7 @@ For `pull_request` rules: how many approving reviews the pull request needs, fro
 
 `rules[].parameters.requireCodeOwnerReview` boolean
 
-For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. Defaults to `false`.
+For `pull_request` rules: when `true`, every changed path that has code owners must also be approved by one of its owners. An owner's approval counts only while the owner has permission to submit reviews on the repository. When a path's owners resolve only to the pull request's author, who can't approve their own pull request, any approval that counts toward `requiredApprovingReviewCount` satisfies that path. Defaults to `false`.
 
 `rules[].parameters.dismissStaleReviewsOnPush` boolean
 
@@ -16985,7 +17147,7 @@ DELETE
 
 `/v1/origin/repos/{ownerSlug}/{repoName}/rulesets/{rulesetId}`
 
-Requires scope `repository:rulesets:write` (installation access token or Cursor user credential).
+Requires scope `repository:rulesets:write` (installation access token or installation user token or Cursor user credential).
 
 Deletes a repository ruleset by its stable Origin ID. The response body is empty.
 
@@ -17033,7 +17195,7 @@ GET
 
 `/v1/origin/namespaces/{namespaceSlug}/ssh-certificate-authorities`
 
-Requires scope `namespace:settings:read` (installation access token or Cursor user credential).
+Requires scope `namespace:settings:read` (installation access token or installation user token or Cursor user credential).
 
 Lists the SSH certificate authorities an owner trusts for git over SSH, newest first, together with whether the owner requires certificates. The response is not paginated: every authority is returned.
 
@@ -17978,7 +18140,7 @@ EVENT
 
 `repository.renamed`
 
-A repository's name changed within its owner namespace. The previous name keeps resolving to this repository (Git, API and web URLs) until another repository takes that name: one created under it, renamed onto it, or published under it.
+A repository's name changed within its owner namespace. The previous name keeps resolving to this repository for git and API requests, and web links to it redirect to the new name. No other repository can take the previous name; this repository can rename back to it.
 
 #### Payload Fields
 

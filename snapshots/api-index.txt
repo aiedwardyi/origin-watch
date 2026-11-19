@@ -63,6 +63,7 @@ Every link below is a Markdown page. Each reference section, endpoint, and webho
 - [Create Installation Access Token](https://cursor.com/docs/api/origin/reference/create-installation-access-token.md)
 - [Create Installation User Token](https://cursor.com/docs/api/origin/reference/create-installation-user-token.md)
 - [List App Installation Repositories](https://cursor.com/docs/api/origin/reference/list-app-installation-repositories.md)
+- [List Installation User Repositories](https://cursor.com/docs/api/origin/reference/list-installation-user-repositories.md)
 - [List Webhook Deliveries](https://cursor.com/docs/api/origin/reference/list-webhook-deliveries.md)
 - [Batch Redeliver Webhook Deliveries](https://cursor.com/docs/api/origin/reference/batch-redeliver-webhook-deliveries.md)
 - [Ping Webhook](https://cursor.com/docs/api/origin/reference/ping-webhook.md)

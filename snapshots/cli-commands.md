@@ -226,17 +226,17 @@ Manage the merge-time and push-time [rulesets](https://cursor.com/docs/origin/se
 
 `create` and `update` take these options. Each repeatable option replaces the whole list:
 
-| Option                     | Description                                                                                                          |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `--name <name>`            | Ruleset display name                                                                                                 |
-| `--description <text>`     | Ruleset description                                                                                                  |
-| `--enforcement <mode>`     | `active`, `evaluate`, or `disabled`                                                                                  |
-| `--kind <kind>`            | `merge_branch`, `push_branch`, `push_tag`, or `push_repository`                                                      |
-| `--included-ref <pattern>` | Ref pattern the ruleset applies to, such as `~DEFAULT_BRANCH` or `refs/heads/release/*`. Repeatable                  |
-| `--excluded-ref <pattern>` | Ref pattern to exclude. Repeatable                                                                                   |
-| `--rule <rule>`            | A rule as `<rule_type>[=<json parameters>]`, such as `'pull_request={"requiredApprovingReviewCount":1}'`. Repeatable |
-| `--bypass-actor <json>`    | A bypass actor as a JSON object with `bypassMode`, `actorKind`, and optional `actorPayload`. Repeatable              |
-| `--input <file>`           | JSON spec file, or `-` for stdin. Accepts `origin ruleset view --json` output. Flags override fields from the spec   |
+| Option                     | Description                                                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name <name>`            | Ruleset display name                                                                                                                                                             |
+| `--description <text>`     | Ruleset description                                                                                                                                                              |
+| `--enforcement <mode>`     | `active`, `evaluate`, or `disabled`                                                                                                                                              |
+| `--kind <kind>`            | `merge_branch`, `push_branch`, `push_tag`, or `push_repository`                                                                                                                  |
+| `--included-ref <pattern>` | Ref pattern the ruleset applies to, such as `~DEFAULT_BRANCH` or `refs/heads/release/*`. Repeatable. A `push_repository` ruleset applies to every push and takes no ref patterns |
+| `--excluded-ref <pattern>` | Ref pattern to exclude. Repeatable                                                                                                                                               |
+| `--rule <rule>`            | A rule as `<rule_type>[=<json parameters>]`, such as `'pull_request={"requiredApprovingReviewCount":1}'`. Repeatable                                                             |
+| `--bypass-actor <json>`    | A bypass actor as a JSON object with `bypassMode`, `actorKind`, and optional `actorPayload`. Repeatable                                                                          |
+| `--input <file>`           | JSON spec file, or `-` for stdin. Accepts `origin ruleset view --json` output. Flags override fields from the spec                                                               |
 
 | Command  | Option                 | Description                                                                                                             |
 | -------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |

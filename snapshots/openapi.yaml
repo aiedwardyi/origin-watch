@@ -4,7 +4,7 @@
 openapi: 3.1.0
 info:
     title: Cursor Origin API
-    description: Public third-party-facing Origin API. Each operation's `x-origin-scopes` extension lists the credential types that can call it in `tokenTypes` (`app`, `installation`, or `user`) and the scopes it requires in `scopes`; `ambient` set to true means every listed scope comes with the credential itself, so an app has nothing to request for it at installation. Each webhook payload schema's `x-origin-webhook-events` extension lists the event types that deliver that payload. `x-cursor-visibility` set to `PREVIEW` marks an operation, parameter, schema, or field that is published in preview and can change before it is generally available.
+    description: Public third-party-facing Origin API. Each operation's `x-origin-scopes` extension lists the credential types that can call it in `tokenTypes` (`app`, `installation`, `installation_as_user`, or `user`) and the scopes it requires in `scopes`; `ambient` set to true means every listed scope comes with the credential itself, so an app has nothing to request for it at installation. Each webhook payload schema's `x-origin-webhook-events` extension lists the event types that deliver that payload. `x-cursor-visibility` set to `PREVIEW` marks an operation, parameter, schema, or field that is published in preview and can change before it is generally available.
     version: v1alpha1
 servers:
     - url: https://api.cursor.com
@@ -586,7 +586,9 @@ paths:
                     format: date-time
                 - name: pageSize
                   in: query
-                  description: Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
+                  description: |-
+                    Max deliveries to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -1732,6 +1734,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:read
@@ -1840,6 +1843,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:write
@@ -1921,6 +1925,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:write
@@ -2003,6 +2008,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:read
@@ -2305,6 +2311,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:read
@@ -2818,6 +2825,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:settings:read
@@ -3143,6 +3151,7 @@ paths:
                 tokenTypes:
                     - app
                     - installation
+                    - installation_as_user
                     - user
                 scopes: []
     /v1/origin/repos/{ownerSlug}:
@@ -3336,6 +3345,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - namespace:repositories:create
@@ -3420,6 +3430,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:metadata:read
@@ -3500,10 +3511,10 @@ paths:
                  one settable field must be provided.
 
                  Provided settings are applied as independent groups in a fixed order:
-                 default branch, automatic head-branch deletion, visibility, then merge
-                 methods. When a group is rejected, groups earlier in that order have
-                 already been applied and remain applied; retrying with the rejected group
-                 corrected converges on the requested state.
+                 default branch, automatic head-branch deletion, visibility, merge
+                 methods, then name. When a group is rejected, groups earlier in that
+                 order have already been applied and remain applied; retrying with the
+                 rejected group corrected converges on the requested state.
             operationId: OriginService_UpdateRepo
             parameters:
                 - name: ownerSlug
@@ -3545,10 +3556,10 @@ paths:
                                 deleteBranchOnMerge:
                                     type: boolean
                                     description: |-
-                                        Whether the head branch is deleted automatically on merge. Supported
-                                         only on repositories whose pull requests live on this API; repositories
-                                         pulling from an upstream source are rejected with a failed-precondition
-                                         error.
+                                        Whether the head branch is deleted automatically on merge. Accepted in
+                                         every mirror state: on a repository that pulls from an upstream source
+                                         the value is stored and takes effect once this host becomes the
+                                         repository's source of truth; a mirror transition does not change it.
                                 visibility:
                                     enum:
                                         - internal
@@ -3557,6 +3568,16 @@ paths:
                                     description: |-
                                         New repository visibility, `internal` or `private`.
                                          Unspecified leaves the visibility unchanged.
+                                name:
+                                    type: string
+                                    description: |-
+                                        New repository name within the same owner, under the naming rules of
+                                         `CreateRepo`. The previous name keeps resolving to this repository for
+                                         git and API requests, and web links to it redirect to the new name. No
+                                         other repository can take the previous name; this repository can rename
+                                         back to it. A name another repository in the owner holds, live or as a
+                                         previous name, is rejected as already existing. Supported only on
+                                         repositories whose source of truth is Origin.
                         examples:
                             updateRepo:
                                 value:
@@ -3638,6 +3659,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:settings:write
@@ -3732,6 +3754,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -4030,6 +4053,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -4138,6 +4162,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -4405,6 +4430,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:write
@@ -4720,6 +4746,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -4849,6 +4876,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -4937,6 +4965,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:members:read
@@ -4978,9 +5007,12 @@ paths:
                   in: query
                   description: |-
                     Opaque cursor from a previous response's `next_page_token`. Empty for the
-                     first page. Encodes the starting ref, walk position, and email, time, and
-                     path filters, so `sha`/`page_size`/`author_emails`/`committer_emails`/`since`/
-                     `until`/`path` on a follow-up request are ignored when a token is supplied.
+                     first page. Encodes the commit the listing started from (the full SHA that
+                     `sha` resolved to on the first page, so later pages keep walking from that
+                     commit even if a branch or tag has moved since), the walk position, and
+                     the email, time, and path filters, so `sha`/`page_size`/`author_emails`/
+                     `committer_emails`/`since`/`until`/`path` on a follow-up request are
+                     ignored when a token is supplied.
                      A filtered page can hold fewer than `page_size` commits while
                      `next_page_token` is set, and is empty with a token only after 100,000
                      scanned commits held no match. Keep paging until `next_page_token` is empty.
@@ -5114,6 +5146,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -5213,6 +5246,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -5357,6 +5391,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -5475,6 +5510,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:checks:read
@@ -5582,6 +5618,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -5729,6 +5766,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -5841,6 +5879,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -5938,6 +5977,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6057,6 +6097,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6151,6 +6192,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6257,6 +6299,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6398,6 +6441,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:write
@@ -6493,6 +6537,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6589,6 +6634,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6698,6 +6744,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -6811,6 +6858,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:write
@@ -6897,6 +6945,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:write
@@ -6993,6 +7042,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -7099,6 +7149,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -7213,6 +7264,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:settings:read
@@ -7323,6 +7375,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:settings:write
@@ -7410,6 +7463,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:settings:write
@@ -7437,8 +7491,8 @@ paths:
                 - name: pageSize
                   in: query
                   description: |-
-                    Maximum labels to return. Defaults to 30 when omitted or zero; capped at
-                     100.
+                    Maximum labels to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -7505,6 +7559,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:labels:read
@@ -7614,6 +7669,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:labels:write
@@ -7695,6 +7751,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:labels:read
@@ -7765,6 +7822,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:labels:write
@@ -7877,6 +7935,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:labels:write
@@ -8033,6 +8092,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:mirror:read
@@ -8127,6 +8187,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:mirror:read
@@ -8293,7 +8354,9 @@ paths:
                     type: string
                 - name: pageSize
                   in: query
-                  description: Maximum results to return. Defaults to 30; maximum 100.
+                  description: |-
+                    Maximum results to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -8530,6 +8593,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -8693,6 +8757,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -8802,6 +8867,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:read
@@ -8878,6 +8944,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -9001,6 +9068,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -9095,6 +9163,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -9179,6 +9248,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -9286,6 +9356,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -9411,6 +9482,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -9586,6 +9658,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -9869,6 +9942,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -9903,7 +9977,9 @@ paths:
                     type: string
                 - name: pageSize
                   in: query
-                  description: Maximum comments to return. Defaults to 30; maximum 100.
+                  description: |-
+                    Maximum comments to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -10039,6 +10115,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:read
@@ -10196,6 +10273,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -10311,6 +10389,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -10415,6 +10494,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -10499,6 +10579,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -10613,6 +10694,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -10726,6 +10808,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -10798,6 +10881,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -10886,6 +10970,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:write
@@ -11050,6 +11135,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:write
@@ -11172,6 +11258,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -11186,8 +11273,10 @@ paths:
                  enforces: for a stacked pull request the verdict covers every pull request
                  from the stack root through this one, and each blocker names the pull
                  request it belongs to. A `mergeable` verdict means a merge of the same
-                 head is expected to succeed. Stacks of more than 200 pull requests in
-                 total, merged ancestors included, are rejected with FAILED_PRECONDITION.
+                 head is expected to succeed. A pull request more than 200 pull requests
+                 deep in its stack counting only pull requests that have not landed, or
+                 more than 10,000 counting all of them, is rejected with
+                 FAILED_PRECONDITION.
             operationId: OriginService_GetPullRequestMergeability
             parameters:
                 - name: ownerSlug
@@ -11336,6 +11425,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:read
@@ -11428,6 +11518,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:read
@@ -11574,6 +11665,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -11695,6 +11787,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -11726,7 +11819,9 @@ paths:
                     type: string
                 - name: pageSize
                   in: query
-                  description: Maximum reviews to return. Defaults to 30; maximum 100.
+                  description: |-
+                    Maximum reviews to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -11811,6 +11906,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:read
@@ -11974,6 +12070,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -12091,6 +12188,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -12226,6 +12324,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:pull_requests:reviews:write
@@ -12324,6 +12423,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:rulesets:read
@@ -12480,6 +12580,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:rulesets:write
@@ -12574,6 +12675,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:rulesets:read
@@ -12737,6 +12839,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:rulesets:write
@@ -12807,6 +12910,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:rulesets:write
@@ -12906,6 +13010,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -13006,6 +13111,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -13192,6 +13298,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:contents:read
@@ -13312,6 +13419,7 @@ paths:
             x-origin-scopes:
                 tokenTypes:
                     - installation
+                    - installation_as_user
                     - user
                 scopes:
                     - repository:mirror:sync
@@ -13429,7 +13537,9 @@ paths:
                   x-cursor-visibility: PREVIEW
                 - name: pageSize
                   in: query
-                  description: Maximum results to return. Defaults to 30; maximum 100.
+                  description: |-
+                    Maximum results to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
                   schema:
                     type: integer
                     format: int32
@@ -13548,6 +13658,129 @@ paths:
                     - repository:pull_requests:read
                     - repository:pull_requests:reviews:read
             x-cursor-visibility: PREVIEW
+    /v1/origin/user/installations/{installationId}/repos:
+        get:
+            tags:
+                - OriginService
+            description: |-
+                Lists the repositories that an installation user token can read.
+
+                 A repository is listed when the acting user can read it, the installation
+                 can read it, and the token's `repository_ids`, when set, include it. The
+                 acting user needs no namespace-wide permission: a repository shared
+                 directly with the user is listed.
+
+                 Requires an installation user token minted by
+                 CreateInstallationUserToken for `installation_id`. The token's `scopes`,
+                 when set, must include `repository:metadata:read`. Any other credential,
+                 and a token without that scope, fails PERMISSION_DENIED. An
+                 `installation_id` other than the token's own installation fails NOT_FOUND.
+
+                 The call fails PERMISSION_DENIED when the acting user, or the
+                 installation, can read no repository in the installation's namespace.
+                 Otherwise, when no repository meets all three conditions, the list is
+                 empty.
+
+                 Repositories are ordered by `id`, so the order does not change when a
+                 repository is renamed. No total count is returned.
+            operationId: OriginService_ListInstallationUserRepositories
+            parameters:
+                - name: installationId
+                  in: path
+                  description: The installation the token was minted for.
+                  required: true
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  description: |-
+                    Max repositories to return. Defaults to 30 when unset or 0. Values above
+                     100 are clamped to 100.
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  description: |-
+                    Opaque cursor from a previous response's `next_page_token`. Empty for the
+                     first page. The same filter must be used when requesting subsequent pages.
+                     `page_size` on a follow-up request applies to that page; omit it to keep
+                     the previous page size.
+                  schema:
+                    type: string
+                - name: filter
+                  in: query
+                  description: |-
+                    Optional case-insensitive substring filter applied to repository names and
+                     owner namespaces. A single-slash `owner/repo` value matches each half
+                     against its corresponding field. Leading and trailing whitespace is
+                     ignored; an empty value applies no filter.
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInstallationUserRepositoriesResponse'
+                            examples:
+                                listInstallationUserRepositories:
+                                    value:
+                                        repositories:
+                                            - id: repo_01k2ja2000e0080000000000q4
+                                              name: rocket
+                                              fullName: acme/rocket
+                                              webUrl: https://cursor.com/codebase/acme/rocket
+                                              owner:
+                                                slug: acme
+                                                id: ns_01k2ja2000e0080000000000p3
+                                                type: team
+                                              defaultBranch: main
+                                              pushedAt: "2026-08-02T14:45:00Z"
+                                              cloneUrl: https://origin.cursor.com/git/acme/rocket.git
+                                        nextPageToken: ""
+                "400":
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "401":
+                    description: Unauthorized
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "403":
+                    description: Forbidden
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "429":
+                    description: Too Many Requests
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+                "404":
+                    description: The addressed resource, or its repository, does not exist or is not visible to the caller. Not-found and no-access are deliberately indistinguishable; a 404 never confirms that the resource does not exist.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+            x-origin-scopes:
+                tokenTypes:
+                    - installation_as_user
+                scopes:
+                    - repository:metadata:read
 components:
     schemas:
         AddAppInstallationRepositoriesRequest:
@@ -13636,6 +13869,7 @@ components:
                 pullNumber:
                     type: string
                 labels:
+                    maxItems: 100
                     type: array
                     items:
                         type: string
@@ -13870,6 +14104,7 @@ components:
                         - $ref: '#/components/schemas/RepoIdentifier'
                     description: 'Identity of the repo: `(owner_slug, name)`.'
                 paths:
+                    maxItems: 20
                     type: array
                     items:
                         type: string
@@ -14265,14 +14500,17 @@ components:
                         - failure
                     type: string
                 message:
+                    maxLength: 65535
                     type: string
                     description: |-
                         Non-empty annotation message. May contain Markdown.
                          Maximum UTF-8 size: 65535 bytes.
                 title:
+                    maxLength: 255
                     type: string
                     description: 'Optional title. Maximum length: 255 Unicode characters.'
                 rawDetails:
+                    maxLength: 65535
                     type: string
                     description: 'Optional raw detail text. Maximum UTF-8 size: 65535 bytes.'
                 location:
@@ -14290,6 +14528,7 @@ components:
             type: object
             properties:
                 path:
+                    maxLength: 4096
                     type: string
                     description: 'Maximum UTF-8 size: 4096 bytes.'
                 startLine:
@@ -14878,13 +15117,20 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Code owners, any one of whom can satisfy the requirement.
+                    description: |-
+                        Code owners, any one of whom can satisfy the requirement, as CODEOWNERS
+                         names them. When `any_human` is set, they resolve only to the author and
+                         the author's own bots, and none of their approvals count.
                     x-cursor-visibility: PREVIEW
                 paths:
                     type: array
                     items:
                         type: string
                     description: Changed paths this owner set covers.
+                    x-cursor-visibility: PREVIEW
+                anyHuman:
+                    type: boolean
+                    description: Any reviewer other than the author may approve. Present only when true.
                     x-cursor-visibility: PREVIEW
             description: One owner set that still needs an approval.
             x-cursor-visibility: PREVIEW
@@ -15253,6 +15499,7 @@ components:
                 checkRunId:
                     type: string
                 annotations:
+                    maxItems: 25
                     type: array
                     items:
                         $ref: '#/components/schemas/CheckRunAnnotationInput'
@@ -15362,6 +15609,7 @@ components:
                         Scope strings to grant the token. Values must be unique and included in the
                          installation's accepted scopes. Empty or omitted inherits the full scope grant.
                 repositoryIds:
+                    maxItems: 50
                     type: array
                     items:
                         type: string
@@ -15400,6 +15648,7 @@ components:
                          it fails INVALID_ARGUMENT. Empty or omitted leaves the token bounded by
                          current access only.
                 repositoryIds:
+                    maxItems: 50
                     type: array
                     items:
                         type: string
@@ -15527,6 +15776,7 @@ components:
                          `PullRequestVersion.number`). Omit to review the latest version at call
                          time. Comments anchor against this same version.
                 comments:
+                    maxItems: 50
                     type: array
                     items:
                         $ref: '#/components/schemas/ReviewCommentInput'
@@ -15578,6 +15828,7 @@ components:
                         - push_repository
                     type: string
                 includedRefNames:
+                    maxItems: 64
                     type: array
                     items:
                         type: string
@@ -15585,6 +15836,7 @@ components:
                         Ref name patterns this ruleset includes. Supports globs and the tokens
                          `~ALL` and `~DEFAULT_BRANCH`.
                 excludedRefNames:
+                    maxItems: 64
                     type: array
                     items:
                         type: string
@@ -15592,10 +15844,12 @@ components:
                         Ref name patterns this ruleset excludes. Same pattern language as
                          `included_ref_names`.
                 rules:
+                    maxItems: 50
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetRuleInput'
                 bypassActors:
+                    maxItems: 100
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetBypassActorInput'
@@ -16314,6 +16568,7 @@ components:
                         Commit, branch, tag, or symbolic ref (for example `HEAD`) to search.
                          Empty means the repository's default branch.
                 query:
+                    maxLength: 4096
                     type: string
                     description: |-
                         The pattern to search for. By default it is a regular expression
@@ -16339,23 +16594,27 @@ components:
                         Match only complete words. Applied only when `literal` is true. Ignored
                          for a regular-expression search; write `\b` around the pattern instead.
                 contextBefore:
+                    maximum: 10
                     type: integer
                     description: |-
                         How many lines immediately before each matching line to return as
                          context. Values above 10 are reduced to 10.
                     format: uint32
                 contextAfter:
+                    maximum: 10
                     type: integer
                     description: |-
                         How many lines immediately after each matching line to return as context.
                          Values above 10 are reduced to 10.
                     format: uint32
                 filterPath:
+                    maxLength: 4096
                     type: string
                     description: |-
                         Restrict the search to this file or directory, relative to the repository
                          root. Empty searches the whole repository. Maximum UTF-8 size: 4096 bytes.
                 includes:
+                    maxItems: 20
                     type: array
                     items:
                         type: string
@@ -16366,6 +16625,7 @@ components:
                          present, a path matching none of them is not searched. At most 20
                          entries. Maximum UTF-8 size per pattern: 4096 bytes.
                 excludes:
+                    maxItems: 20
                     type: array
                     items:
                         type: string
@@ -16375,7 +16635,9 @@ components:
                          out everything beneath it. At most 20 entries. Maximum UTF-8 size per
                          pattern: 4096 bytes.
                 maxResults:
+                    maximum: 1000
                     type: integer
+                    default: 1000
                     description: |-
                         The most matching occurrences to return. Zero requests the default of
                          1000, and values above 1000 are reduced to 1000. Context lines do not
@@ -16795,7 +17057,9 @@ components:
             type: object
             properties:
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max repositories to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -16835,7 +17099,9 @@ components:
             type: object
             properties:
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max installations to return. Defaults to 30 when unset or 0. Values
                          above 100 are clamped to 100.
@@ -16863,7 +17129,9 @@ components:
                 identifier:
                     $ref: '#/components/schemas/RepoIdentifier'
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max branches to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -16896,7 +17164,9 @@ components:
                 checkRunId:
                     type: string
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max annotations to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -16932,7 +17202,9 @@ components:
                     type: string
                     description: Commit SHA (40- or 64-char hex) to list check runs for.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max check runs to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -16978,7 +17250,9 @@ components:
                     type: string
                     description: Server-assigned check suite id (`crg_…`).
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max check runs to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -17014,7 +17288,9 @@ components:
                     type: string
                     description: Commit SHA (40- or 64-char hex) to list suites for.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max suites to return. Defaults to 30 when unset or 0. Values above 100 are
                          clamped to 100.
@@ -17052,7 +17328,9 @@ components:
                         SHA, branch, tag, or symbolic ref (for example `HEAD`) of the commit
                          whose files should be listed.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max changed files to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -17090,7 +17368,9 @@ components:
                         SHA, branch, tag, or symbolic ref (for example `HEAD`) to start listing
                          from. Empty means the repo's default branch.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max commits to return. Defaults to 30 when unset or 0. Values above 100 are
                          clamped to 100.
@@ -17099,9 +17379,12 @@ components:
                     type: string
                     description: |-
                         Opaque cursor from a previous response's `next_page_token`. Empty for the
-                         first page. Encodes the starting ref, walk position, and email, time, and
-                         path filters, so `sha`/`page_size`/`author_emails`/`committer_emails`/`since`/
-                         `until`/`path` on a follow-up request are ignored when a token is supplied.
+                         first page. Encodes the commit the listing started from (the full SHA that
+                         `sha` resolved to on the first page, so later pages keep walking from that
+                         commit even if a branch or tag has moved since), the walk position, and
+                         the email, time, and path filters, so `sha`/`page_size`/`author_emails`/
+                         `committer_emails`/`since`/`until`/`path` on a follow-up request are
+                         ignored when a token is supplied.
                          A filtered page can hold fewer than `page_size` commits while
                          `next_page_token` is set, and is empty with a token only after 100,000
                          scanned commits held no match. Keep paging until `next_page_token` is empty.
@@ -17177,7 +17460,9 @@ components:
                         `"{base}...{head}"`, where either revision may be a SHA, branch, tag, or
                          symbolic ref such as `HEAD`.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max changed files to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -17204,6 +17489,46 @@ components:
                     readOnly: true
                     type: string
                     description: Opaque cursor for the next page; empty when there are no more files.
+        ListInstallationUserRepositoriesRequest:
+            required:
+                - installationId
+            type: object
+            properties:
+                installationId:
+                    type: string
+                    description: The installation the token was minted for.
+                pageSize:
+                    maximum: 100
+                    type: integer
+                    default: 30
+                    description: |-
+                        Max repositories to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
+                    format: int32
+                pageToken:
+                    type: string
+                    description: |-
+                        Opaque cursor from a previous response's `next_page_token`. Empty for the
+                         first page. The same filter must be used when requesting subsequent pages.
+                         `page_size` on a follow-up request applies to that page; omit it to keep
+                         the previous page size.
+                filter:
+                    type: string
+                    description: |-
+                        Optional case-insensitive substring filter applied to repository names and
+                         owner namespaces. A single-slash `owner/repo` value matches each half
+                         against its corresponding field. Leading and trailing whitespace is
+                         ignored; an empty value applies no filter.
+        ListInstallationUserRepositoriesResponse:
+            type: object
+            properties:
+                repositories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Repo'
+                nextPageToken:
+                    type: string
+                    description: Opaque cursor for the next page; empty when there are no more pages.
         ListLabelsRequest:
             required:
                 - identifier
@@ -17212,10 +17537,12 @@ components:
                 identifier:
                     $ref: '#/components/schemas/RepoIdentifier'
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
-                        Maximum labels to return. Defaults to 30 when omitted or zero; capped at
-                         100.
+                        Maximum labels to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                 pageToken:
                     type: string
@@ -17266,7 +17593,9 @@ components:
                     type: string
                     description: Slug of the namespace whose apps to list.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max apps to return. Defaults to 30 when unset or 0. Values above 100 are
                          clamped to 100.
@@ -17295,7 +17624,9 @@ components:
                     type: string
                     description: Slug of the namespace whose grants to list.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max grants to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -17327,7 +17658,9 @@ components:
             type: object
             properties:
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max namespaces to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -17360,8 +17693,12 @@ components:
                 pullNumber:
                     type: string
                 pageSize:
+                    maximum: 100
                     type: integer
-                    description: Maximum comments to return. Defaults to 30; maximum 100.
+                    default: 30
+                    description: |-
+                        Maximum comments to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                 pageToken:
                     type: string
@@ -17419,7 +17756,9 @@ components:
                 pullNumber:
                     type: string
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max commits to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -17454,7 +17793,9 @@ components:
                 pullNumber:
                     type: string
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max changed files to return. Defaults to 30 when unset or 0. Values above
                          100 are clamped to 100.
@@ -17539,8 +17880,12 @@ components:
                 pullNumber:
                     type: string
                 pageSize:
+                    maximum: 100
                     type: integer
-                    description: Maximum reviews to return. Defaults to 30; maximum 100.
+                    default: 30
+                    description: |-
+                        Maximum reviews to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                 pageToken:
                     type: string
@@ -17580,8 +17925,12 @@ components:
                          "closed" includes merged pull requests; "merged" is only those. Any other
                          value is rejected with INVALID_ARGUMENT.
                 pageSize:
+                    maximum: 100
                     type: integer
-                    description: Maximum results to return. Defaults to 30; maximum 100.
+                    default: 30
+                    description: |-
+                        Maximum results to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                 pageToken:
                     type: string
@@ -17714,7 +18063,9 @@ components:
                     type: string
                     description: Parent owner entity slug.
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max repos to return. Defaults to 30 when unset or 0. Values above 100 are
                          clamped to 100.
@@ -17747,7 +18098,9 @@ components:
                 identifier:
                     $ref: '#/components/schemas/RepoIdentifier'
                 pageSize:
+                    maximum: 100
                     type: integer
+                    default: 30
                     description: |-
                         Max grants to return. Defaults to 30 when unset or 0. Values above 100
                          are clamped to 100.
@@ -17841,8 +18194,12 @@ components:
                     type: string
                     format: date-time
                 pageSize:
+                    maximum: 100
                     type: integer
-                    description: Defaults to 30 when unset or 0. Values above 100 are clamped to 100.
+                    default: 30
+                    description: |-
+                        Max deliveries to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                 pageToken:
                     type: string
@@ -20179,9 +20536,9 @@ components:
                     format: date-time
             description: |-
                 A repository's name changed within its owner namespace. The previous name
-                 keeps resolving to this repository (Git, API and web URLs) until another
-                 repository takes that name: one created under it, renamed onto it, or
-                 published under it.
+                 keeps resolving to this repository for git and API requests, and web links
+                 to it redirect to the new name. No other repository can take the previous
+                 name; this repository can rename back to it.
             x-origin-webhook-events:
                 - repository.renamed
             example:
@@ -20571,6 +20928,7 @@ components:
                          lists is allowed. An unspecified merge defaults to one of the allowed
                          methods; an explicit other method fails with FAILED_PRECONDITION.
                 requiredReviewers:
+                    maxItems: 20
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetRequiredReviewer'
@@ -20648,6 +21006,7 @@ components:
                          50. Defaults to 1.
                     format: int32
                 filePatterns:
+                    maxItems: 50
                     type: array
                     items:
                         type: string
@@ -20788,6 +21147,7 @@ components:
             type: object
             properties:
                 q:
+                    maxLength: 1024
                     type: string
                     description: |-
                         The search query: words to match plus qualifiers such as `is:open`,
@@ -20834,8 +21194,12 @@ components:
                          results.
                     x-cursor-visibility: PREVIEW
                 pageSize:
+                    maximum: 100
                     type: integer
-                    description: Maximum results to return. Defaults to 30; maximum 100.
+                    default: 30
+                    description: |-
+                        Maximum results to return. Defaults to 30 when unset or 0. Values above
+                         100 are clamped to 100.
                     format: int32
                     x-cursor-visibility: PREVIEW
                 pageToken:
@@ -20903,6 +21267,7 @@ components:
                 pullNumber:
                     type: string
                 labels:
+                    maxItems: 100
                     type: array
                     items:
                         type: string
@@ -21322,10 +21687,10 @@ components:
                 deleteBranchOnMerge:
                     type: boolean
                     description: |-
-                        Whether the head branch is deleted automatically on merge. Supported
-                         only on repositories whose pull requests live on this API; repositories
-                         pulling from an upstream source are rejected with a failed-precondition
-                         error.
+                        Whether the head branch is deleted automatically on merge. Accepted in
+                         every mirror state: on a repository that pulls from an upstream source
+                         the value is stored and takes effect once this host becomes the
+                         repository's source of truth; a mirror transition does not change it.
                 visibility:
                     enum:
                         - internal
@@ -21334,6 +21699,16 @@ components:
                     description: |-
                         New repository visibility, `internal` or `private`.
                          Unspecified leaves the visibility unchanged.
+                name:
+                    type: string
+                    description: |-
+                        New repository name within the same owner, under the naming rules of
+                         `CreateRepo`. The previous name keeps resolving to this repository for
+                         git and API requests, and web links to it redirect to the new name. No
+                         other repository can take the previous name; this repository can rename
+                         back to it. A name another repository in the owner holds, live or as a
+                         previous name, is rejected as already existing. Supported only on
+                         repositories whose source of truth is Origin.
         UpdateRulesetRequest:
             required:
                 - identifier
@@ -21366,6 +21741,7 @@ components:
                         - push_repository
                     type: string
                 includedRefNames:
+                    maxItems: 64
                     type: array
                     items:
                         type: string
@@ -21373,6 +21749,7 @@ components:
                         Ref name patterns this ruleset includes. Supports globs and the tokens
                          `~ALL` and `~DEFAULT_BRANCH`.
                 excludedRefNames:
+                    maxItems: 64
                     type: array
                     items:
                         type: string
@@ -21380,10 +21757,12 @@ components:
                         Ref name patterns this ruleset excludes. Same pattern language as
                          `included_ref_names`.
                 rules:
+                    maxItems: 50
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetRuleInput'
                 bypassActors:
+                    maxItems: 100
                     type: array
                     items:
                         $ref: '#/components/schemas/RulesetBypassActorInput'
