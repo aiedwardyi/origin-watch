@@ -8499,6 +8499,20 @@ paths:
                      INVALID_ARGUMENT.
                   schema:
                     type: string
+                - name: authorPerformedVia
+                  in: query
+                  description: |-
+                    Optional filter on the app or service account the author acted through:
+                     the `app_…` or `sa_…` id as returned in `performed_via` on
+                     `pull_request.author`. Matches only pull requests a user opened through
+                     that app or service account, such as their personal Grok bot; a pull
+                     request the app or service account authored itself has it as `author`
+                     and does not match, so filter those with `author`. Combined with
+                     `author`, a pull request must match both. An id that no author has acted
+                     through yields an empty list. Any other value, a `user_…` id included,
+                     is rejected with INVALID_ARGUMENT.
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: OK
@@ -18052,6 +18066,18 @@ components:
                          pull requests whose `merged_at` is at or before this instant. Unmerged
                          pull requests never match. Malformed timestamps are rejected with
                          INVALID_ARGUMENT.
+                authorPerformedVia:
+                    type: string
+                    description: |-
+                        Optional filter on the app or service account the author acted through:
+                         the `app_…` or `sa_…` id as returned in `performed_via` on
+                         `pull_request.author`. Matches only pull requests a user opened through
+                         that app or service account, such as their personal Grok bot; a pull
+                         request the app or service account authored itself has it as `author`
+                         and does not match, so filter those with `author`. Combined with
+                         `author`, a pull request must match both. An id that no author has acted
+                         through yields an empty list. Any other value, a `user_…` id included,
+                         is rejected with INVALID_ARGUMENT.
         ListPullRequestsResponse:
             type: object
             properties:
